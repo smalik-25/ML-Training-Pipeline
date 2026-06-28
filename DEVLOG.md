@@ -5,6 +5,58 @@ entries at the top.
 
 ---
 
+## 2026-06-27 — Phase 5: MLflow model registry & promotion
+
+**What I built**
+
+`stages/register.py` and `tests/test_register.py`. The stage finds the best run
+for a run_date (lowest `final_val_rmse`), registers it under
+`sneaker-price-model`, and promotes it to the `staging` alias only if it beats
+the incumbent's val RMSE — otherwise it logs a warning and leaves the alias
+alone. Every run writes a `promotion_report.json`. Unlike Phases 1–4, I was able
+to install MLflow (3.14) in the sandbox, so this stage is **verified end to
+end**, not just statically: 5 tests covering first-run promotion, a better model
+beating the incumbent, a worse model being refused, best-of-N selection within a
+run_date, and the no-runs error path — all green against real MLflow 3.x.
+
+**Design decisions**
+
+- **Aliases, not stages.** The plan said "transition to Staging", but MLflow 3.x
+  deprecated stage transitions (`Staging`/`Production`) in favour of aliases. I
+  use a `staging` alias, which is the current-API equivalent of a staged
+  pointer. Documented in the module so the divergence from the plan is a
+  deliberate, explained choice.
+- **Promote only on strict improvement.** A new version is always *registered*
+  (lineage is preserved for every run), but the `staging` alias only moves if the
+  candidate's val RMSE is strictly lower than the incumbent's. A worse model
+  exits with a warning, not a failure — "this run wasn't better" is a normal
+  outcome, not a pipeline error, and bad models must never silently overwrite
+  good ones.
+- **Read the incumbent metric before registering.** We resolve the current
+  `staging` model's RMSE up front (via its run), so the comparison is against the
+  truly-deployed model, and the report records exactly what was beaten (or
+  "no existing model" on the first run).
+- **Registry decoupled from model flavor.** MLflow 3.x's high-level
+  `register_model("runs:/…/model")` requires a logged MLmodel flavor; our
+  training stage logs a plain `state_dict + scaler` `model.pt`. Rather than
+  couple the registry to a PyTorch flavor, I register the run's artifact
+  *directory* directly via the low-level client. Clean lineage, no flavor lock-in.
+
+**Bug caught by running it.** Two real issues only surfaced because MLflow was
+actually executing: (1) the `runs:/…/model` MLmodel requirement above, and (2) a
+test-isolation trap — once `run()` calls `mlflow.set_tracking_uri()`, that global
+overrides the env var, so a later test's seed writes to the previous test's DB.
+Pinning the URI in the seed helper fixed it. The stage itself was correct; this
+was a test-harness subtlety worth recording.
+
+**Next up**
+
+Phase 6 — `dags/sneaker_training_pipeline.py` (Airflow): orchestrate
+ingest → features → validate → train → register with XCom path passing, retries,
+SLA, and a failure callback.
+
+---
+
 ## 2026-06-27 — Phase 4: PyTorch model & Ray Train + MLflow
 
 **What I built**

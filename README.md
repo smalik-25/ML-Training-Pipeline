@@ -105,7 +105,7 @@ and testable with one command.
 - [x] **Phase 2** — PySpark feature engineering
 - [x] **Phase 3** — Pandera dataset validation
 - [x] **Phase 4** — PyTorch model & Ray Train + MLflow
-- [ ] **Phase 5** — MLflow model registry & promotion logic
+- [x] **Phase 5** — MLflow model registry & promotion logic
 - [ ] **Phase 6** — Airflow DAG orchestration
 - [ ] **Phase 7** — Docker, CI/CD, and docs polish
 
@@ -147,3 +147,8 @@ and rationale.
   `prepare_model`/`prepare_data_loader`/checkpointing, so multi-worker/GPU
   scaling is a `ScalingConfig` change rather than a rewrite. Preprocessing is fit
   on train only and saved inside `model.pt` for leakage-safe inference.
+- **Promote only on strict improvement (Phase 5)** — every run is registered for
+  lineage, but the `staging` alias moves only if the candidate beats the
+  incumbent's val RMSE; a worse model warns instead of failing. Uses MLflow 3.x
+  aliases (stages are deprecated) and every decision leaves a
+  `promotion_report.json`.
