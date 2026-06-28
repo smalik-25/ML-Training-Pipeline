@@ -96,7 +96,7 @@ and testable with one command.
 - [x] **Phase 0** — Project scaffold, shared I/O layer, config, packaging, CI skeleton
 - [x] **Phase 1** — Data lake layer & ingest stage (+ fixtures)
 - [x] **Phase 2** — PySpark feature engineering
-- [ ] **Phase 3** — Pandera dataset validation
+- [x] **Phase 3** — Pandera dataset validation
 - [ ] **Phase 4** — PyTorch model & Ray Train + MLflow
 - [ ] **Phase 5** — MLflow model registry & promotion logic
 - [ ] **Phase 6** — Airflow DAG orchestration
@@ -129,7 +129,10 @@ and rationale.
   reliable signal.
 - **Microsecond Parquet timestamps (Phase 2)** — coerced at the I/O layer so the
   lake is readable by both pyarrow and Spark 3.5.
+- **Pandera over ad-hoc validation (Phase 3)** — declarative checks double as a
+  data contract; lazy validation reports every failing column/check/row count.
+  The rolling-null rule is a custom cross-row check, outliers are flagged not
+  dropped, and a ≥90% row-retention check guards the stage boundary.
 
 _(Remaining phase-specific decisions — temporal train/val split, Ray Train on a
-single machine, Pandera over ad-hoc checks — are documented as those phases
-land.)_
+single machine — are documented as those phases land.)_

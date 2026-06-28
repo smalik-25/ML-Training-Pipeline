@@ -5,6 +5,56 @@ entries at the top.
 
 ---
 
+## 2026-06-27 — Phase 3: Pandera dataset validation
+
+**What I built**
+
+`stages/validate.py` and `tests/test_validate.py`. The stage builds a Pandera
+`DataFrameSchema` over the features Parquet, validates lazily, and on success
+writes the validated Parquet plus a `validation_report.json`. Verified end to
+end: 68 rows, 100% retention, 16 rolling-nulls, report written. Tests: 7 cases
+covering the clean pass and each failure mode. Full suite now 18 passing.
+
+**Design decisions**
+
+- **Pandera over ad-hoc `if/else`.** The checks are declarative, so the schema
+  doubles as documentation of the data contract, and lazy validation
+  (`lazy=True`) collects *all* violations in one pass and reports which column,
+  which check, and how many rows — not just the first failure. The failure
+  summary groups by (column, check) with affected row counts, which is what you
+  actually want at 3am when a run breaks.
+- **The rolling-null rule is a custom cross-row check, not a null check.**
+  `rolling_7d_avg_premium` may be null, but *only* on rows where the shoe has
+  < 7 days of history. I implemented this as a wide check returning a row-aligned
+  boolean Series (`is_null == insufficient_history`), so Pandera pinpoints any
+  row that is wrongly nulled *or* wrongly populated. A plain `nullable=True`
+  would have let a silently-broken feature stage through.
+- **Outliers are flagged, never dropped.** `price_premium ∈ [-1.0, 20.0]` is a
+  hard check that fails the run, rather than clipping or filtering — bad data
+  should stop the pipeline, not be quietly laundered into the training set.
+- **Row-retention check spans the stage boundary.** The validator reads the raw
+  sales count and asserts the features output kept ≥ 90% of it. This is the one
+  check that can't live inside the feature DataFrame — it guards against silent
+  row loss in a join or filter upstream, and lands in the report regardless.
+- **`coerce=True` to absorb engine dtype drift.** Spark/pyarrow hand back
+  `int32`, `datetime64[us]`, and a `category` brand column. Rather than make the
+  schema brittle to those, I coerce to the declared types — which also means the
+  validated Parquet we write downstream has normalised, predictable dtypes.
+
+**Noted**
+
+The validation report is the reproducibility artifact for this stage: every run
+leaves a timestamped record of row counts, retention, and which checks ran.
+Phase 5's promotion logic and the Airflow failure callback will lean on the same
+"every decision leaves a JSON" pattern.
+
+**Next up**
+
+Phase 4 — `models/net.py` (SneakerPriceNet) and `stages/train.py` (Ray Train +
+PyTorch + MLflow), with a temporal train/val split.
+
+---
+
 ## 2026-06-27 — Phase 2: PySpark feature engineering
 
 **What I built**
