@@ -1,0 +1,52 @@
+name: CI
+
+# CI runs against synthetic fixtures ONLY. It never touches real S3 or the live
+# sneaker-intel Postgres. The lint + DAG-import job installs only the light
+# extras (airflow, dev) so it stays fast and never resolves Spark/Ray/Torch.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install core + dev (no heavy frameworks)
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Lint (ruff)
+        run: ruff check .
+
+      - name: Unit tests (fixtures only)
+        run: pytest
+
+  dag-integrity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Airflow with constraints + core
+        run: |
+          python -m pip install --upgrade pip
+          pip install "apache-airflow==2.9.3" \
+            -c "https://raw.githubusercontent.com/apache/airflow/constraints-2.9.3/constraints-3.11.txt"
+          pip install -e ".[dev]"
+
+      - name: DAG imports without errors
+        run: |
+          python -c "import importlib; importlib.import_module('dags.sneaker_training_pipeline'); print('DAG import OK')"

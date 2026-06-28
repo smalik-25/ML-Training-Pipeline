@@ -1,0 +1,67 @@
+# ml-pipeline -- developer entrypoints.
+#
+# Every stage is independently runnable here without Airflow. RUN_DATE is
+# required for stage targets; CONFIG defaults to the committed pipeline config.
+
+RUN_DATE ?= 2025-01-01
+CONFIG   ?= config/pipeline_config.yaml
+PYTHON   ?= python
+
+.PHONY: help fixtures ingest features validate train register pipeline \
+        airflow-up airflow-down mlflow-up mlflow-down minio-up minio-down \
+        test lint format install
+
+help:
+	@grep -E '^[a-zA-Z_-]+:.*?##' $(MAKEFILE_LIST) | \
+	  awk 'BEGIN{FS=":.*?## "}{printf "  %-14s %s\n", $$1, $$2}'
+
+install: ## Install dev extras (lint + tests, no heavy frameworks)
+	pip install -e ".[dev]"
+
+fixtures: ## Generate synthetic Parquet fixtures into data/fixtures/
+	$(PYTHON) generate_fixtures.py
+
+ingest: ## Run the ingest stage
+	$(PYTHON) -m stages.ingest --run-date $(RUN_DATE) --config $(CONFIG)
+
+features: ## Run the feature engineering stage
+	$(PYTHON) -m stages.features --run-date $(RUN_DATE) --config $(CONFIG)
+
+validate: ## Run the validation stage
+	$(PYTHON) -m stages.validate --run-date $(RUN_DATE) --config $(CONFIG)
+
+train: ## Run the training stage
+	$(PYTHON) -m stages.train --run-date $(RUN_DATE) --config $(CONFIG) --num-workers 2
+
+register: ## Run the model registration stage
+	$(PYTHON) -m stages.register --run-date $(RUN_DATE) --config $(CONFIG)
+
+pipeline: ingest features validate train register ## Run all stages in order
+
+airflow-up: ## Start local Airflow (LocalExecutor)
+	docker compose -f infra/docker-compose.airflow.yml up -d
+
+airflow-down:
+	docker compose -f infra/docker-compose.airflow.yml down
+
+mlflow-up: ## Start local MLflow (Postgres backend + S3 artifacts)
+	docker compose -f infra/docker-compose.mlflow.yml up -d
+
+mlflow-down:
+	docker compose -f infra/docker-compose.mlflow.yml down
+
+minio-up: ## Optional: faithful local S3 API for testing s3:// paths
+	docker compose -f infra/docker-compose.minio.yml up -d
+
+minio-down:
+	docker compose -f infra/docker-compose.minio.yml down
+
+test: ## Run the test suite against fixtures
+	pytest
+
+lint: ## Lint with ruff
+	ruff check .
+
+format: ## Auto-fix lint + format
+	ruff check --fix .
+	ruff format .

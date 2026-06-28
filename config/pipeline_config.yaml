@@ -1,0 +1,24 @@
+# Single source of truth for every storage path in the pipeline.
+#
+# No stage hardcodes a path -- each loads this file and asks PipelineConfig
+# (stages/config.py) for the URI it needs. Because every URI is built from
+# `storage_root`, switching the whole pipeline between local (dev/CI) and S3
+# (prod) is a one-line change here. Stage code is identical either way.
+
+# Storage root. The ONLY line that changes between environments.
+#   dev / CI : "./data"               -> resolves to the local filesystem
+#   prod     : "s3://<bucket>/<key>"  -> resolves to S3 via pyarrow.fs
+# Override at runtime with the STORAGE_ROOT env var if desired (see Makefile).
+storage_root: "./data"
+
+# Prefixes laid out under storage_root. Final URIs are built as:
+#   {storage_root}/{prefix}/{run_date}/<file>.parquet
+raw_prefix: "raw"
+features_prefix: "features"
+validated_prefix: "validated"
+models_prefix: "models"
+failures_prefix: "failures"
+
+# Default run date. CLI --run-date overrides this; if both are absent the
+# stage falls back to today's date.
+run_date: "2025-01-01"

@@ -1,0 +1,30 @@
+# Local MLflow tracking server with a Postgres metadata backend and S3 artifact
+# store -- the production-pattern setup, not sqlite. Fleshed out in Phase 4.
+version: "3.8"
+
+services:
+  mlflow-db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: mlflow
+      POSTGRES_PASSWORD: mlflow
+      POSTGRES_DB: mlflow
+    volumes:
+      - mlflow-pgdata:/var/lib/postgresql/data
+
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.11.3
+    depends_on:
+      - mlflow-db
+    ports:
+      - "5000:5000"
+    # TODO(Phase 4): wire backend-store-uri to mlflow-db and
+    # default-artifact-root to s3://<bucket>/mlflow-artifacts via env.
+    command: >
+      mlflow server
+      --host 0.0.0.0
+      --backend-store-uri postgresql://mlflow:mlflow@mlflow-db/mlflow
+      --artifacts-destination ./mlruns
+
+volumes:
+  mlflow-pgdata:

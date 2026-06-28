@@ -1,0 +1,65 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ml-pipeline"
+version = "0.1.0"
+description = "Offline ML training pipeline for sneaker resale price-premium prediction (portfolio ML infrastructure project)."
+readme = "README.md"
+requires-python = "==3.11.*"
+license = { text = "MIT" }
+authors = [{ name = "Sam Malik" }]
+
+# Core dependencies: the I/O + config + validation layer shared by every stage.
+# Deliberately lean so that lint / DAG-import / I/O tests do not have to pull
+# Spark, Torch, or Ray. The heavy frameworks live in optional groups below.
+dependencies = [
+    "pandas>=2.0",
+    "pyarrow>=14.0",
+    "fsspec>=2024.2.0",
+    "s3fs>=2024.2.0",
+    "pyyaml>=6.0",
+    "pandera>=0.18",
+]
+
+# Split extras so each environment installs only what it needs. This is the
+# reason CI stays fast: the lint + DAG-import job installs `airflow,dev` and
+# never resolves Spark/Ray/Torch.
+[project.optional-dependencies]
+spark = [
+    "pyspark>=3.5,<3.6",
+]
+train = [
+    "torch>=2.2",
+    "ray[train]>=2.9",
+    "mlflow>=2.11",
+]
+airflow = [
+    # Pin Airflow with its official constraints file at install time, e.g.:
+    #   pip install "apache-airflow==2.9.3" \
+    #     -c "https://raw.githubusercontent.com/apache/airflow/constraints-2.9.3/constraints-3.11.txt"
+    "apache-airflow==2.9.3",
+    "apache-airflow-providers-amazon>=8.0",
+]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.4",
+]
+
+[tool.setuptools]
+packages = ["stages", "models", "dags"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+# Conservative, interview-legible rule set: pyflakes, pycodestyle, isort,
+# bugbear, pyupgrade. No bare excepts (E722) is enforced -- matches the
+# "fail loudly" convention.
+select = ["F", "E", "W", "I", "B", "UP"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

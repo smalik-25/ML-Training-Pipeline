@@ -1,0 +1,21 @@
+# Local Airflow (LocalExecutor -- no Celery for a portfolio project). The dags/
+# folder is mounted as a volume so DAG edits are picked up without rebuilds.
+# Fleshed out in Phase 6; this is the scaffold.
+version: "3.8"
+
+services:
+  airflow:
+    image: apache/airflow:2.9.3-python3.11
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    volumes:
+      - ../dags:/opt/airflow/dags
+      - ../stages:/opt/airflow/stages
+      - ../models:/opt/airflow/models
+      - ../config:/opt/airflow/config
+    ports:
+      - "8080:8080"
+    # TODO(Phase 6): postgres metadata DB service, init/migrate, webserver +
+    # scheduler split, .env wiring for AWS/MLflow.
+    command: standalone

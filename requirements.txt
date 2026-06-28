@@ -1,0 +1,33 @@
+# GENERATED FILE -- pyproject.toml is the source of truth.
+# Regenerate with:  pip-compile pyproject.toml --all-extras  (or maintain by hand)
+#
+# This pins the full union of dependencies for a reproducible local install.
+# In practice prefer installing extras you need, e.g.:
+#   pip install -e ".[dev]"              # lint + tests, no heavy frameworks
+#   pip install -e ".[spark,dev]"        # feature stage work
+#   pip install -e ".[train,dev]"        # training stage work
+# Airflow should be installed with its constraints file (see pyproject + README).
+
+# --- core ---
+pandas>=2.0
+pyarrow>=14.0
+fsspec>=2024.2.0
+s3fs>=2024.2.0
+pyyaml>=6.0
+pandera>=0.18
+
+# --- spark ---
+pyspark>=3.5,<3.6
+
+# --- train ---
+torch>=2.2
+ray[train]>=2.9
+mlflow>=2.11
+
+# --- airflow (install with constraints file; see README) ---
+apache-airflow==2.9.3
+apache-airflow-providers-amazon>=8.0
+
+# --- dev ---
+pytest>=8.0
+ruff>=0.4

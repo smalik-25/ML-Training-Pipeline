@@ -1,0 +1,33 @@
+# Feature engineering parameters (consumed by stages/features.py in Phase 2).
+#
+# Kept separate from pipeline_config.yaml so feature logic can be tuned without
+# touching storage/orchestration config. Values here define the economics the
+# Spark stage computes -- they mirror the sneaker-intel dbt int_sales_enriched
+# model so the "same logic, different compute layer" story stays honest.
+
+# Rolling window (days) for rolling_7d_avg_premium, computed per shoe_id over a
+# sale_date-ordered Spark window.
+rolling_window_days: 7
+
+# Demand signal window: average search_index in the N days before a drop_date.
+# We use fact_search_interest (Google Trends) rather than the sparse
+# fact_social_posts (Reddit) -- documented as a data-quality decision.
+search_signal_window_days: 7
+
+# Ordinal encoding for release_type (scarcer -> higher). Drives
+# release_type_encoded.
+release_type_order:
+  limited: 3
+  raffle: 2
+  fcfs: 1
+  general: 0
+
+# Output partitioning. Writing partitioned by brand lets downstream training
+# jobs that filter by brand read a single partition instead of the full
+# dataset. Rationale documented in DEVLOG.
+partition_by: "brand"
+
+# Bounds used to sanity-check engineered features (the Pandera stage in Phase 3
+# enforces these as hard checks; duplicated intent, single source of numbers).
+price_premium_min: -1.0
+price_premium_max: 20.0
