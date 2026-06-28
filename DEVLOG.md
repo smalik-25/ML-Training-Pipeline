@@ -5,6 +5,62 @@ entries at the top.
 
 ---
 
+## 2026-06-27 — Phase 6: Airflow DAG orchestration
+
+**What I built**
+
+`dags/sneaker_training_pipeline.py`, `tests/test_dag.py`, and a fleshed-out
+`infra/docker-compose.airflow.yml` (LocalExecutor + Postgres metadata DB +
+init/webserver/scheduler). The DAG chains ingest → feature_engineering →
+validate → train → register. Verified against real Airflow 2.9.3 in the sandbox:
+5 structure tests green (task set, linear dependency edges, retries/retry_delay,
+SLA + failure callback, root/leaf).
+
+**Design decisions**
+
+- **Thin tasks; logic stays in the stages.** Each PythonOperator is a wrapper
+  that builds the run's `PipelineConfig` and calls the stage's `run()`. The DAG
+  owns *topology*, not business logic — so the same stage code runs identically
+  from the CLI, from a test, or from Airflow.
+- **Lazy stage imports for fast, robust parsing.** PySpark/Torch/Ray/MLflow are
+  imported *inside* the task callables, never at module top. The scheduler
+  re-parses DAG files constantly, so heavy top-level imports would tax every
+  parse — and, just as importantly, it lets the DAG load (and its structure be
+  unit-tested) in an environment without Spark/Torch installed. That's exactly
+  what makes `tests/test_dag.py` runnable in the light CI job and the DAG-import
+  CI check meaningful.
+- **XCom carries lineage; config stays the source of truth.** Paths are derived
+  from config, but each task still pushes the concrete artifact URI(s) it
+  produced and the next task pulls and logs what it's consuming. No path is
+  hardcoded in the DAG, and the run → artifact lineage is visible in the UI.
+  I chose not to make the stages *re-read* their input path from XCom (they
+  derive it from config) — threading it for observability rather than control
+  keeps the single-source-of-truth invariant intact while still demonstrating
+  the XCom pattern.
+- **Validation failure fails the whole run.** The validate task lets
+  `FeatureValidationError` propagate, so a Pandera breach fails the task and
+  therefore the DAG run — bad data can't reach training.
+- **Failure callback writes to `failures/`.** Every task carries an
+  `on_failure_callback` that records the failed task, run_date, what it was
+  supposed to produce, and the exception, to `failures/{run_date}/{task}.json`.
+  The callback swallows its *own* errors (logged, not raised) so it can never
+  mask the original failure.
+- **retries=2 / 2-min delay / 2-hour SLA** in `default_args` — the resilience
+  knobs an interviewer expects to see, applied uniformly.
+
+**On the compose file.** Running the *full* DAG needs the heavy runtime libs in
+the Airflow image, which I install via `_PIP_ADDITIONAL_REQUIREMENTS` (`-e
+.[spark,train]`). That makes first boot slow and the image large; in a real
+deployment you'd bake a custom image. The DAG's correctness as a graph is
+verified independently of all that by the structure tests.
+
+**Next up**
+
+Phase 7 — Docker stage-runner image, Makefile/CI polish (incl. a Spark + a
+train CI job), and finalizing `docs/architecture.md`.
+
+---
+
 ## 2026-06-27 — Phase 5: MLflow model registry & promotion
 
 **What I built**

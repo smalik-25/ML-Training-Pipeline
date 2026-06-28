@@ -106,7 +106,7 @@ and testable with one command.
 - [x] **Phase 3** — Pandera dataset validation
 - [x] **Phase 4** — PyTorch model & Ray Train + MLflow
 - [x] **Phase 5** — MLflow model registry & promotion logic
-- [ ] **Phase 6** — Airflow DAG orchestration
+- [x] **Phase 6** — Airflow DAG orchestration
 - [ ] **Phase 7** — Docker, CI/CD, and docs polish
 
 ## Design decisions
@@ -152,3 +152,8 @@ and rationale.
   incumbent's val RMSE; a worse model warns instead of failing. Uses MLflow 3.x
   aliases (stages are deprecated) and every decision leaves a
   `promotion_report.json`.
+- **Thin Airflow tasks + lazy imports (Phase 6)** — tasks just call each stage's
+  `run()`; heavy libs import inside the callables so DAG parsing stays fast and
+  the graph is testable without Spark/Torch installed. XCom threads artifact
+  lineage (config remains the source of truth), a validation failure fails the
+  run, and an `on_failure_callback` writes to the `failures/` prefix.
