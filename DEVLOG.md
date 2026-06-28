@@ -5,6 +5,69 @@ entries at the top.
 
 ---
 
+## 2026-06-27 — Phase 4: PyTorch model & Ray Train + MLflow
+
+**What I built**
+
+`models/net.py` (SneakerPriceNet + ModelConfig), `stages/train.py` (Ray Train
++ PyTorch + MLflow), `tests/test_train.py`, a fleshed-out
+`infra/docker-compose.mlflow.yml` (Postgres backend + S3 artifacts), and
+`io.write_bytes`/`read_bytes` for saving the model artifact. Full suite is now
+22 passing, 2 skipped (the torch/ray/mlflow tests, see below).
+
+**Design decisions**
+
+- **Temporal train/val split, not random.** Train on sales before 2023,
+  validate on 2023+. A random split leaks the future: the model could see a
+  shoe's later sales while predicting its earlier ones, inflating validation
+  metrics that wouldn't hold in production where we always predict forward. The
+  split must actually divide the data — `prepare_arrays` raises if either side
+  is empty rather than training on a degenerate split.
+- **Ray Train even on one machine.** The loop runs inside
+  `ray.train.torch.TorchTrainer` with `prepare_model` + `prepare_data_loader` +
+  `report`/`Checkpoint`, not a raw loop or `DataParallel`. On a single machine
+  it behaves like a normal run, but scaling to N workers/GPUs becomes a
+  `ScalingConfig` change, not a rewrite. `prepare_data_loader` also shards the
+  data via a DistributedSampler, so multi-worker training is genuinely
+  distributed, not duplicated.
+- **Preprocessing fit on train only, saved with the model.** Imputation
+  (rolling-null rows → train column means) and standardization (train mean/std)
+  are fit on the training split and travel inside `model.pt` alongside the
+  weights. Inference reproduces the exact pipeline; no separate scaler to lose.
+  This is the leakage-safe version — val is standardized with *train* stats.
+- **MLflow is the reproducibility ledger.** Every run logs all ModelConfig
+  hyperparameters, per-epoch train/val loss, final val RMSE, the feature-column
+  list, and run_date; the model artifact goes to both MLflow and
+  `s3://.../models/{run_date}/{run_id}/model.pt`. The driver logs metrics from
+  Ray's `result.metrics_dataframe`, keeping MLflow calls out of the worker.
+- **Local SQLite MLflow by default, server when you want it.** The stage honours
+  `MLFLOW_TRACKING_URI` and otherwise falls back to a local SQLite store
+  (`sqlite:///mlflow.db`), so a quick run needs no infrastructure; the compose
+  file provides the production-pattern Postgres+S3 server for when you do.
+  _(Correction after a local run: I initially defaulted to the file store, but
+  MLflow 3.x put the file backend in maintenance mode and hard-errors on it —
+  and it never supported the model registry Phase 5 needs anyway. SQLite is the
+  right zero-setup default; it backs both tracking and the registry.)_
+
+**Sandbox limitation — what was and wasn't executed here.** The sandbox's
+network blocks the PyTorch CPU wheel index and the default wheel is too large to
+install within the time limit, so I could not run the torch/ray/mlflow path in
+this environment. What I *did* verify: the pure data-prep logic (temporal split,
+leakage-safe imputation/standardization, empty-split guard) runs green, and the
+whole tree is ruff-clean. The model forward pass and the full Ray training run
+are real tests, `importorskip`-guarded so they skip where the heavy deps are
+absent — they should be run on a machine with the `train` extra installed
+(`pip install -e ".[train,dev]" && pytest tests/test_train.py`). Phase 7 CI
+should add a job that installs the `train` extra and runs them.
+
+**Next up**
+
+Phase 5 — `stages/register.py` (MLflow Model Registry): pick the best run,
+register, promote to Staging only if it beats the current Staging val RMSE, log
+a promotion report.
+
+---
+
 ## 2026-06-27 — Phase 3: Pandera dataset validation
 
 **What I built**

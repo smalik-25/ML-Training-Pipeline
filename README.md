@@ -82,6 +82,13 @@ make airflow-up     # local Airflow (LocalExecutor); UI at http://localhost:8080
 # trigger the `sneaker_training_pipeline` DAG from the Airflow UI
 ```
 
+MLflow tracking: leave `MLFLOW_TRACKING_URI` unset for a zero-setup local run —
+the train/register stages default to a SQLite store (`sqlite:///mlflow.db`),
+which backs both experiment tracking and the model registry. Point it at the
+compose server (`http://localhost:5000`) for the production-pattern
+Postgres + S3 setup. (The legacy file store is deprecated in MLflow 3.x and
+can't back the registry, so we don't use it.)
+
 ## Source data
 
 The production source is the sneaker-intel Postgres warehouse (`fact_sales`,
@@ -97,7 +104,7 @@ and testable with one command.
 - [x] **Phase 1** — Data lake layer & ingest stage (+ fixtures)
 - [x] **Phase 2** — PySpark feature engineering
 - [x] **Phase 3** — Pandera dataset validation
-- [ ] **Phase 4** — PyTorch model & Ray Train + MLflow
+- [x] **Phase 4** — PyTorch model & Ray Train + MLflow
 - [ ] **Phase 5** — MLflow model registry & promotion logic
 - [ ] **Phase 6** — Airflow DAG orchestration
 - [ ] **Phase 7** — Docker, CI/CD, and docs polish
@@ -133,6 +140,10 @@ and rationale.
   data contract; lazy validation reports every failing column/check/row count.
   The rolling-null rule is a custom cross-row check, outliers are flagged not
   dropped, and a ≥90% row-retention check guards the stage boundary.
-
-_(Remaining phase-specific decisions — temporal train/val split, Ray Train on a
-single machine — are documented as those phases land.)_
+- **Temporal train/val split (Phase 4)** — train on pre-2023 sales, validate on
+  2023+, so the model is always evaluated predicting forward in time; a random
+  split would leak future information.
+- **Ray Train even on a single machine (Phase 4)** — `TorchTrainer` with
+  `prepare_model`/`prepare_data_loader`/checkpointing, so multi-worker/GPU
+  scaling is a `ScalingConfig` change rather than a rewrite. Preprocessing is fit
+  on train only and saved inside `model.pt` for leakage-safe inference.

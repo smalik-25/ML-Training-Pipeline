@@ -1,5 +1,11 @@
-# Local MLflow tracking server with a Postgres metadata backend and S3 artifact
-# store -- the production-pattern setup, not sqlite. Fleshed out in Phase 4.
+# Local MLflow tracking server, production-pattern: a Postgres metadata backend
+# and an S3 artifact store -- not sqlite + local files. This mirrors how a real
+# tracking server is run, so the train/register stages talk to it exactly as
+# they would in production.
+#
+# Point the pipeline at it with MLFLOW_TRACKING_URI=http://localhost:5000.
+# The train stage falls back to a local ./mlruns store when that env var is
+# unset, so this server is optional for quick local runs.
 version: "3.8"
 
 services:
@@ -11,20 +17,36 @@ services:
       POSTGRES_DB: mlflow
     volumes:
       - mlflow-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mlflow"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   mlflow:
     image: ghcr.io/mlflow/mlflow:v2.11.3
     depends_on:
-      - mlflow-db
+      mlflow-db:
+        condition: service_healthy
     ports:
       - "5000:5000"
-    # TODO(Phase 4): wire backend-store-uri to mlflow-db and
-    # default-artifact-root to s3://<bucket>/mlflow-artifacts via env.
+    environment:
+      # Credentials for the S3 artifact store; supplied from your .env.
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION}
+      # Override to your bucket, e.g. s3://my-bucket/mlflow-artifacts.
+      MLFLOW_ARTIFACT_ROOT: ${MLFLOW_ARTIFACT_ROOT:-s3://CHANGE-ME/mlflow-artifacts}
+    # Install the Postgres driver + boto3, then serve with Postgres metadata and
+    # S3 artifacts. The server brokers artifact access (--serve-artifacts) so
+    # clients don't each need bucket credentials.
     command: >
+      bash -lc "pip install --no-cache-dir psycopg2-binary boto3 &&
       mlflow server
-      --host 0.0.0.0
+      --host 0.0.0.0 --port 5000
       --backend-store-uri postgresql://mlflow:mlflow@mlflow-db/mlflow
-      --artifacts-destination ./mlruns
+      --artifacts-destination $${MLFLOW_ARTIFACT_ROOT}
+      --serve-artifacts"
 
 volumes:
   mlflow-pgdata:

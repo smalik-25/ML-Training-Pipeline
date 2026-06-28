@@ -118,6 +118,22 @@ def write_json(obj: dict[str, Any], uri: str) -> str:
     return uri
 
 
+def write_bytes(data: bytes, uri: str) -> str:
+    """Write raw bytes (e.g. a serialized model.pt) to ``uri``. Returns the URI."""
+    fs, path = _resolve(uri)
+    _ensure_parent(fs, path)
+    with fs.open_output_stream(path) as sink:
+        sink.write(data)
+    return uri
+
+
+def read_bytes(uri: str) -> bytes:
+    """Read raw bytes from ``uri``."""
+    fs, path = _resolve(uri)
+    with fs.open_input_stream(path) as src:
+        return src.read()
+
+
 def path_join(base: str, *parts: str) -> str:
     """Join URI parts while preserving any ``scheme://`` prefix.
 
