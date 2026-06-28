@@ -94,7 +94,7 @@ and testable with one command.
 ## Build progress
 
 - [x] **Phase 0** — Project scaffold, shared I/O layer, config, packaging, CI skeleton
-- [ ] **Phase 1** — Data lake layer & ingest stage (+ fixtures)
+- [x] **Phase 1** — Data lake layer & ingest stage (+ fixtures)
 - [ ] **Phase 2** — PySpark feature engineering
 - [ ] **Phase 3** — Pandera dataset validation
 - [ ] **Phase 4** — PyTorch model & Ray Train + MLflow

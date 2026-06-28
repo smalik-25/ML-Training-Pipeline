@@ -16,6 +16,7 @@ authors = [{ name = "Sam Malik" }]
 # Spark, Torch, or Ray. The heavy frameworks live in optional groups below.
 dependencies = [
     "pandas>=2.0",
+    "numpy>=1.26",
     "pyarrow>=14.0",
     "fsspec>=2024.2.0",
     "s3fs>=2024.2.0",
@@ -27,6 +28,11 @@ dependencies = [
 # reason CI stays fast: the lint + DAG-import job installs `airflow,dev` and
 # never resolves Spark/Ray/Torch.
 [project.optional-dependencies]
+# Real Postgres ingest only. Fixture-mode ingest and CI never install these.
+ingest = [
+    "sqlalchemy>=2.0",
+    "psycopg[binary]>=3.1",
+]
 spark = [
     "pyspark>=3.5,<3.6",
 ]

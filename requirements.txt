@@ -10,11 +10,16 @@
 
 # --- core ---
 pandas>=2.0
+numpy>=1.26
 pyarrow>=14.0
 fsspec>=2024.2.0
 s3fs>=2024.2.0
 pyyaml>=6.0
 pandera>=0.18
+
+# --- ingest (real Postgres export only; not needed for fixtures/CI) ---
+sqlalchemy>=2.0
+psycopg[binary]>=3.1
 
 # --- spark ---
 pyspark>=3.5,<3.6

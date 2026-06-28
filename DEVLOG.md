@@ -5,6 +5,54 @@ entries at the top.
 
 ---
 
+## 2026-06-27 — Phase 1: data lake layer & ingest
+
+**What I built**
+
+`stages/ingest.py` (real, not a stub) and `generate_fixtures.py`, plus
+`tests/test_ingest.py`. Ingest lands the four source tables — `sales`, `shoes`,
+`drops`, `search_interest` — as separate Parquet files under
+`raw/{run_date}/`, logging row counts, schema, and the written URIs. The dbt
+mart tables are deliberately not exported; the Phase 2 Spark stage re-derives
+those metrics from these raw tables.
+
+**Why I made these decisions**
+
+- **One output contract, two source modes.** Ingest reads from the live
+  sneaker-intel Postgres when `SNEAKER_INTEL_DSN` is set, and otherwise lands
+  the synthetic fixtures from `data/fixtures/`. Both modes write byte-identical
+  raw layouts, so every downstream stage is oblivious to where the data came
+  from. SQLAlchemy/psycopg are imported lazily and live in an optional
+  `[ingest]` extra — fixture-mode runs and CI never install them.
+- **"Partitioned by run_date" via path layout, not a partition column.** Each
+  raw file sits under a `raw/{run_date}/` prefix. Re-running for a new date
+  never clobbers a prior landing, and downstream stages address a run by its
+  date. Simpler and more S3-idiomatic than a Hive partition column on an
+  already-dated export.
+- **Fail loudly on empty sources.** Ingest refuses to land a zero-row partition
+  rather than silently producing an empty lake that breaks training three stages
+  later.
+
+**Fixtures: built to be plausible, not just present.** Deterministic (seed 42)
+so tests assert on exact values. Eight shoes across four brands and all four
+release types; 68 sales clustered per shoe so rolling windows populate; demand
+(Google Trends `search_index`) points within 7 days before each drop so the
+Phase 2 pre-drop join has rows. Verified properties: premium range 0.04–1.71
+(inside the Pandera −1…20 bounds), mean premium strictly ordered by scarcity
+(limited 1.42 > raffle 0.92 > fcfs 0.40 > general 0.05), sale dates span
+2020–2024 (both sides of the 2023 train/val split), and
+`(shoe_id, sale_date, size_us)` is unique. The deliberately-bad fixture for the
+validation-failure test is deferred to Phase 3, where it's a *features*-level
+mutation (negative `days_since_release`) rather than a raw-table concern.
+
+**Next up**
+
+Phase 2 — `stages/features.py` (PySpark): price/size premiums, rolling 7-day
+premium, pre-drop search signal, brand broadcast join, output partitioned by
+brand.
+
+---
+
 ## 2026-06-27 — Phase 0: project scaffold
 
 **What I built**
