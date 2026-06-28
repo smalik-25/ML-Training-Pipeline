@@ -5,6 +5,68 @@ entries at the top.
 
 ---
 
+## 2026-06-27 — Phase 2: PySpark feature engineering
+
+**What I built**
+
+`stages/features.py` (PySpark, `local[*]`), a `FeatureConfig` loader in
+`stages/config.py`, `tests/test_features.py`, and `tests/conftest.py`. The stage
+reads the four raw tables, computes seven features, and writes a flat features
+Parquet partitioned by brand. Verified end to end on fixtures: 68 in / 68 out,
+four brand partitions, premiums 0.04–1.71, 16 rolling nulls (insufficient
+history), ordinal encoding correctly ordered, brand averages sensible
+(Jordan 1.14 highest).
+
+**Design decisions**
+
+- **Broadcast joins for the small dimensions.** `dim_shoes` and the per-brand
+  average premium are tiny relative to the sales fact table, so both are
+  attached with `F.broadcast(...)` rather than a correlated subquery or a
+  shuffle join. `brand_avg_premium` is computed as a standalone group-by
+  aggregate and broadcast back — this avoids a window over the whole fact table
+  and keeps the brand aggregate from forcing a wide shuffle. This is the kind of
+  Spark-physical-plan choice worth being able to explain.
+- **Partition output by brand.** Downstream training that filters to one brand
+  reads a single partition instead of scanning the full dataset. The tradeoff is
+  many-small-files risk on a tiny dataset, which I mitigate with `coalesce(1)`
+  (one file per brand partition).
+- **Rolling-average null semantics are explicit, not incidental.**
+  `rolling_7d_avg_premium` is a time-range window (`rangeBetween` over seconds,
+  not a row-count window, so it spans real days regardless of sale density). I
+  null it out exactly when the shoe has fewer than 7 days of history
+  (`days_since_first_sale < 7`), which is the precise contract Phase 3 will
+  validate. Encoding the "insufficient history" rule here, rather than letting
+  the window silently average a partial window, means the null carries meaning.
+- **Google Trends over Reddit as the demand signal.** `search_index_7d_pre_drop`
+  averages `fact_search_interest` in the 7 days before each drop.
+  `fact_social_posts` (Reddit) is too sparse in sneaker-intel to be a reliable
+  signal — a data-quality call, documented so it's a deliberate choice rather
+  than an omission.
+- **Microsecond timestamps at the I/O layer.** pandas/pyarrow default to
+  nanosecond Parquet timestamps, which Spark 3.5 refuses to read ("Illegal
+  Parquet type: INT64 TIMESTAMP(NANOS)"). I coerce timestamps to microseconds in
+  `io.write_parquet`, so the raw lake is readable by both the pyarrow stages and
+  the Spark stage. This is exactly the cross-engine compatibility seam that bites
+  people in real lakes.
+- **`to_spark_path` mirrors the pyarrow I/O seam.** Spark reads through Hadoop,
+  not pyarrow, so S3 must be `s3a://` and local paths absolute. Added a small
+  translator alongside `_resolve` so the Spark stage shares the same URI
+  conventions as everything else. Also pin `SPARK_LOCAL_IP` to loopback in
+  `build_spark` so an unresolvable container hostname can't crash driver startup.
+
+**Noted for later**
+
+The Spark tests are `importorskip`-guarded so the light CI lint+test job (no
+Spark installed) doesn't break on collection. Phase 7 CI polish should add a
+dedicated job that installs the `spark` extra and runs them for real.
+
+**Next up**
+
+Phase 3 — `stages/validate.py` (Pandera): schema + statistical checks on the
+features Parquet, including the rolling-null custom check, with loud failure.
+
+---
+
 ## 2026-06-27 — Phase 1: data lake layer & ingest
 
 **What I built**

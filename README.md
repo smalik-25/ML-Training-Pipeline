@@ -95,7 +95,7 @@ and testable with one command.
 
 - [x] **Phase 0** — Project scaffold, shared I/O layer, config, packaging, CI skeleton
 - [x] **Phase 1** — Data lake layer & ingest stage (+ fixtures)
-- [ ] **Phase 2** — PySpark feature engineering
+- [x] **Phase 2** — PySpark feature engineering
 - [ ] **Phase 3** — Pandera dataset validation
 - [ ] **Phase 4** — PyTorch model & Ray Train + MLflow
 - [ ] **Phase 5** — MLflow model registry & promotion logic
@@ -119,6 +119,17 @@ and rationale.
 - **Python 3.11 + split dependency extras** — the highest version all four heavy
   frameworks support cleanly; extras keep lint/DAG-import CI fast.
 
-_(Phase-specific decisions — temporal train/val split, partition-by-brand, Ray
-Train on a single machine, Pandera over ad-hoc checks, Google Trends over Reddit
-as the demand signal — are documented as those phases land.)_
+- **Broadcast joins for small dimensions (Phase 2)** — `dim_shoes` and the
+  per-brand average premium are broadcast rather than shuffled; `brand_avg_premium`
+  is a standalone aggregate joined back, avoiding a full-table window.
+- **Partition features by brand (Phase 2)** — brand-filtered training reads one
+  partition instead of the whole dataset.
+- **Google Trends over Reddit as the demand signal (Phase 2)** —
+  `fact_social_posts` is too sparse in sneaker-intel; `search_index` is the
+  reliable signal.
+- **Microsecond Parquet timestamps (Phase 2)** — coerced at the I/O layer so the
+  lake is readable by both pyarrow and Spark 3.5.
+
+_(Remaining phase-specific decisions — temporal train/val split, Ray Train on a
+single machine, Pandera over ad-hoc checks — are documented as those phases
+land.)_

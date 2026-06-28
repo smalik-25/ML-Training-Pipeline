@@ -109,3 +109,43 @@ def load_config(config_path: str, run_date: str | None = None) -> PipelineConfig
         failures_prefix=raw["failures_prefix"],
         run_date=str(resolved_run_date),
     )
+
+
+@dataclass(frozen=True)
+class FeatureConfig:
+    """Feature engineering parameters (from feature_config.yaml).
+
+    Kept separate from PipelineConfig so feature logic can be tuned without
+    touching storage/orchestration config.
+    """
+
+    rolling_window_days: int
+    search_signal_window_days: int
+    release_type_order: dict[str, int]
+    partition_by: str
+    price_premium_min: float
+    price_premium_max: float
+
+
+def load_feature_config(config_path: str) -> FeatureConfig:
+    """Load feature engineering config from a YAML file.
+
+    Raises:
+        FileNotFoundError: if the config file does not exist.
+        KeyError: if a required key is missing (we fail loudly).
+    """
+    path = Path(config_path)
+    if not path.is_file():
+        raise FileNotFoundError(f"Feature config not found: {config_path}")
+
+    with path.open("r", encoding="utf-8") as fh:
+        raw = yaml.safe_load(fh)
+
+    return FeatureConfig(
+        rolling_window_days=int(raw["rolling_window_days"]),
+        search_signal_window_days=int(raw["search_signal_window_days"]),
+        release_type_order=dict(raw["release_type_order"]),
+        partition_by=str(raw["partition_by"]),
+        price_premium_min=float(raw["price_premium_min"]),
+        price_premium_max=float(raw["price_premium_max"]),
+    )

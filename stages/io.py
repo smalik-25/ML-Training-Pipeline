@@ -81,17 +81,23 @@ def write_parquet(
     """
     fs, path = _resolve(uri)
     table = pa.Table.from_pandas(df, preserve_index=False)
+    # Coerce timestamps to microseconds. pandas/pyarrow default to nanoseconds,
+    # which Spark 3.5's Parquet reader rejects ("Illegal Parquet type: INT64
+    # TIMESTAMP(NANOS)"). Microsecond precision keeps the raw lake readable by
+    # both the pyarrow stages and the Spark feature stage.
+    _ts_kwargs = {"coerce_timestamps": "us", "allow_truncated_timestamps": True}
     if partition_cols:
         pq.write_to_dataset(
             table,
             root_path=path,
             partition_cols=partition_cols,
             filesystem=fs,
+            **_ts_kwargs,
         )
     else:
         _ensure_parent(fs, path)
         with fs.open_output_stream(path) as sink:
-            pq.write_table(table, sink)
+            pq.write_table(table, sink, **_ts_kwargs)
     return uri
 
 
@@ -135,3 +141,25 @@ def _ensure_parent(fs: pafs.FileSystem, path: str) -> None:
     parent = posixpath.dirname(path)
     if parent:
         fs.create_dir(parent, recursive=True)
+
+
+def to_spark_path(uri: str) -> str:
+    """Translate a pipeline URI into a path Spark's Hadoop layer understands.
+
+    Spark does not use pyarrow's filesystem; it reads/writes through Hadoop, so
+    S3 must be addressed as ``s3a://`` and local paths must be absolute. This is
+    the Spark-side counterpart to ``_resolve`` for the pyarrow stages.
+
+        s3://bucket/key   -> s3a://bucket/key
+        ./data/raw/x      -> /abs/data/raw/x
+        file:///abs/x     -> /abs/x
+    """
+    import os
+
+    parsed = urlparse(uri)
+    if parsed.scheme in ("", "file"):
+        local_path = parsed.path if parsed.scheme == "file" else uri
+        return os.path.abspath(os.path.expanduser(local_path))
+    if parsed.scheme == "s3":
+        return uri.replace("s3://", "s3a://", 1)
+    return uri
