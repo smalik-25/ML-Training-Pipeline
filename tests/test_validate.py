@@ -22,10 +22,10 @@ def _fcfg() -> FeatureConfig:
     return FeatureConfig(
         rolling_window_days=7,
         search_signal_window_days=7,
-        release_type_order={"limited": 3, "raffle": 2, "fcfs": 1, "general": 0},
+        release_type_order={"limited": 2, "collab": 1, "general": 0},
         partition_by="brand",
         price_premium_min=-1.0,
-        price_premium_max=20.0,
+        price_premium_max=50.0,
     )
 
 
@@ -37,11 +37,11 @@ def _clean_features() -> pd.DataFrame:
     """
     rows = [
         # shoe 1 (Jordan, limited, release 2021-12-01)
-        dict(shoe_id=1, brand="Jordan", release_type="limited", rte=3,
+        dict(shoe_id=1, brand="Jordan", release_type="limited", rte=2,
              retail=180.0, sale_date="2022-01-01", roll=NAN),   # hist 0
-        dict(shoe_id=1, brand="Jordan", release_type="limited", rte=3,
+        dict(shoe_id=1, brand="Jordan", release_type="limited", rte=2,
              retail=180.0, sale_date="2022-01-04", roll=NAN),   # hist 3
-        dict(shoe_id=1, brand="Jordan", release_type="limited", rte=3,
+        dict(shoe_id=1, brand="Jordan", release_type="limited", rte=2,
              retail=180.0, sale_date="2022-01-12", roll=1.30),  # hist 11
         # shoe 2 (Nike, general, release 2022-02-01)
         dict(shoe_id=2, brand="Nike", release_type="general", rte=0,
@@ -112,12 +112,22 @@ def test_rolling_null_inconsistency_fails() -> None:
     assert "rolling_7d_avg_premium" in str(exc.value)
 
 
-def test_duplicate_keys_fail() -> None:
+def test_duplicate_sale_id_fails() -> None:
+    """sale_id is the real unique key; a repeated sale_id must fail."""
     clean = _clean_features()
-    dup = pd.concat([clean, clean.iloc[[0]]], ignore_index=True)
-    dup.loc[len(dup) - 1, "sale_id"] = 999  # keep sale_id unique; key is dup
+    dup = pd.concat([clean, clean.iloc[[0]]], ignore_index=True)  # repeats sale_id 1
     with pytest.raises(FeatureValidationError):
         validate_features(dup, _fcfg())
+
+
+def test_repeated_shoe_size_date_is_allowed() -> None:
+    """Multiple sales of the same shoe/size/day are valid (real resale grain)."""
+    clean = _clean_features()
+    extra = clean.iloc[[0]].copy()
+    extra["sale_id"] = 999  # distinct sale, same (shoe_id, sale_date, size_us)
+    combined = pd.concat([clean, extra], ignore_index=True)
+    validated, _ = validate_features(combined, _fcfg())
+    assert len(validated) == 6
 
 
 def test_run_writes_validated_and_report(tmp_path) -> None:

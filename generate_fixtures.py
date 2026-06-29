@@ -11,8 +11,9 @@ noise:
     actually populates for later rows;
   * sale dates span 2021-2024 so the Phase 4 temporal train/val split
     (pre-2023 vs 2023+) has data on both sides;
-  * (shoe_id, sale_date, size_us) is unique, matching the Pandera duplicate
-    check in Phase 3.
+  * sale_id is unique (the real transaction key). Note: real resale data has
+    multiple sales of the same shoe/size on the same day, so we do NOT treat
+    (shoe_id, sale_date, size_us) as a key.
 
 Schemas mirror the sneaker-intel Postgres tables exactly so that fixture-mode
 ingest and real Postgres ingest produce identical raw Parquet.
@@ -36,19 +37,21 @@ logger = logging.getLogger("generate_fixtures")
 SEED = 42
 
 # Release scarcity -> base price premium over retail. Drives realistic spreads.
-_BASE_PREMIUM = {"limited": 1.40, "raffle": 0.90, "fcfs": 0.40, "general": 0.05}
+# release_type vocabulary matches the real sneaker-intel dim_drops CHECK
+# constraint: ('general', 'limited', 'collab').
+_BASE_PREMIUM = {"limited": 1.40, "collab": 0.90, "general": 0.05}
 _SIZES = [7.0, 7.5, 8.0, 8.5, 9.0, 9.5, 10.0, 10.5, 11.0, 12.0]
 
 # Eight shoes across brands and release types. (shoe_id, brand, model, colorway,
 # retail_price, release_date, release_type, silhouette)
 _SHOES: list[tuple] = [
     (1, "Jordan", "Air Jordan 1 High", "Chicago", 180.0, date(2021, 11, 13), "limited", "Air Jordan 1"),  # noqa: E501
-    (2, "Jordan", "Air Jordan 4 Retro", "Bred", 210.0, date(2020, 12, 12), "raffle", "Air Jordan 4"),  # noqa: E501
-    (3, "Nike", "Dunk Low", "Panda", 110.0, date(2021, 3, 10), "fcfs", "Dunk"),
+    (2, "Jordan", "Air Jordan 4 Retro", "Bred", 210.0, date(2020, 12, 12), "collab", "Air Jordan 4"),  # noqa: E501
+    (3, "Nike", "Dunk Low", "Panda", 110.0, date(2021, 3, 10), "general", "Dunk"),
     (4, "Nike", "Air Force 1 Low", "Triple White", 100.0, date(2020, 1, 15), "general", "Air Force 1"),  # noqa: E501
-    (5, "Adidas", "Yeezy Boost 350 V2", "Zebra", 220.0, date(2022, 2, 9), "raffle", "Yeezy 350"),
+    (5, "Adidas", "Yeezy Boost 350 V2", "Zebra", 220.0, date(2022, 2, 9), "limited", "Yeezy 350"),
     (6, "Adidas", "Samba OG", "Black White", 100.0, date(2022, 6, 1), "general", "Samba"),
-    (7, "New Balance", "550", "White Green", 120.0, date(2021, 9, 20), "fcfs", "550"),
+    (7, "New Balance", "550", "White Green", 120.0, date(2021, 9, 20), "collab", "550"),
     (8, "New Balance", "990v5", "Grey", 185.0, date(2020, 5, 5), "general", "990"),
 ]
 
@@ -98,7 +101,8 @@ def _make_sales(shoes: pd.DataFrame, rng: np.random.Generator) -> pd.DataFrame:
             sale_id += 1
 
     df = pd.DataFrame(rows)
-    # Enforce uniqueness of (shoe_id, sale_date, size_us) -- the Phase 3 check.
+    # Drop accidental (shoe, date, size) collisions only to keep the tiny fixture
+    # tidy; sale_id is the real unique key. Real data is not deduped this way.
     df = df.drop_duplicates(subset=["shoe_id", "sale_date", "size_us"]).reset_index(drop=True)
     df["sale_id"] = range(1, len(df) + 1)
     return df
@@ -133,7 +137,7 @@ def _make_search_interest(
     rows: list[dict] = []
     for shoe in shoes.itertuples(index=False):
         drop_dt = shoe.release_date.date()
-        peak = {"limited": 95, "raffle": 75, "fcfs": 55, "general": 30}[shoe.release_type]
+        peak = {"limited": 95, "collab": 75, "general": 30}[shoe.release_type]
         # Weekly points from 14 days before to 14 days after the drop.
         for week_off in range(-14, 15, 7):
             signal_dt = drop_dt + timedelta(days=week_off)

@@ -5,6 +5,86 @@ entries at the top.
 
 ---
 
+## 2026-06-28 — Real-data integration: reconciling with the sneaker-intel schema
+
+**What happened**
+
+Up to now every stage ran on synthetic fixtures. Wiring up the actual
+sneaker-intel Postgres surfaced that the warehouse's real schema differs
+materially from the idealized one the project plan assumed. Rather than rewrite
+five stages, I made **ingest the anti-corruption layer** between the source
+schema and our canonical pipeline schema, and reconciled three data-contract
+assumptions that the synthetic data had quietly gotten wrong.
+
+**Schema gaps found (real vs. what we assumed)**
+
+- Keys are `shoe_key`/`sale_key`/etc., not `shoe_id`/`sale_id`.
+- `fact_sales` uses `sold_price`/`sold_date`/`size`/`source`, not
+  `sale_price`/`sale_date`/`size_us`/`platform`.
+- **`retail_price` / `release_date` / `release_type` live in `dim_drops`, not
+  `dim_shoes`.** A shoe can have several drops.
+- `fact_search_interest` uses `interest`/`point_date`/`geo`, not
+  `search_index`/`signal_date`/`platform`.
+- `release_type` is `('general','limited','collab')` — not the synthetic
+  `limited/raffle/fcfs/general`.
+
+**Decisions**
+
+- **Ingest as an anti-corruption layer.** `stages/ingest.py` now holds explicit
+  SQL (`TABLE_QUERIES`) that aliases every column, casts Postgres `numeric` to
+  float, and rolls each shoe's *canonical drop* (earliest release via
+  `DISTINCT ON`) up onto the shoe row to supply retail/release. The Parquet it
+  lands is byte-compatible with the fixtures, so features/validate/train/register
+  never learn the source schema exists. This is the one seam that knows what the
+  warehouse looks like — a clean, interview-legible pattern.
+- **`release_type` vocabulary fixed** to `{limited, collab, general}` in
+  `feature_config.yaml`; fixtures updated to match. Because validate builds its
+  `isin` set from the config, that one change propagates to the schema check.
+- **Premium ceiling raised 20 → 50.** Real StockX resale of hyped Off-White /
+  Yeezy pairs reaches ~20–25× retail; a ceiling of 20 would reject legitimate
+  sales. >50× is still treated as a data error. (Fixtures stay under 2×.)
+- **Dropped the `(shoe_id, sale_date, size_us)` uniqueness check.** This was an
+  idealization that does not survive contact with transaction data: real resale
+  has many sales of the same shoe/size on the same day. The true unique key is
+  `sale_id` (already enforced as a column constraint). Keeping the composite
+  check would have rejected valid data — a good example of the validator's
+  contract needing to match the real *grain* of the data, not a tidy assumption.
+- **DSN normalized to psycopg3.** The `[ingest]` extra ships psycopg v3, but a
+  bare `postgresql://` DSN makes SQLAlchemy reach for psycopg2; ingest rewrites
+  the scheme to `postgresql+psycopg://` so sneaker-intel's `.env` DSN works
+  unchanged.
+
+**Verification.** Fixture-mode pipeline (ingest→features→validate) is green on
+the new vocabulary, full suite 33 passed / 2 skipped, ruff clean. The real
+Postgres export itself runs on the host (the DB isn't reachable from the build
+sandbox), so its first real exercise is on Sam's machine — and the Pandera stage
+is deliberately the safety net for whatever real-data quirks surface.
+
+**The real run (99,956 StockX sales).** Ingest pulled 99,956 sales / 55 shoes /
+55 drops / 552 trends rows; every shoe had a drop, so nothing was orphaned.
+Spark computed features on all 99,956 rows in ~15s. Validation then earned its
+place by catching two things the synthetic data never would have:
+
+- **5,601 sales (~5.6%) with negative `days_since_release`** — sold *before* the
+  recorded release date (min −69 days, none beyond −90). This is real: hyped
+  pairs trade pre-release. I made `days_since_release_min` a config value and set
+  it to −90 — a bounded pre-release window that still flags grossly wrong dates.
+- **`price_premium` max of 20.32** — which would have *failed* the original 20.0
+  ceiling. The earlier bump to 50 (made on reasoning about Off-White resale) was
+  exactly right; the real max landed just over the old line.
+
+With a temporal split at 2019 (train 2017–2018 ≈ 83.8K rows, validate 2019 ≈
+16.2K), the model trained to **val RMSE 0.209** (premium scale 0–20) and was
+registered + promoted to `staging` as v1. Brands in the StockX data are
+Off-White and Yeezy; `search_index_7d_pre_drop` is mostly null (the trends pulls
+don't overlap 2017–2018 release dates) and is imputed at train time, as designed.
+
+Net: the pipeline runs end-to-end on real data, and every place the synthetic
+assumptions were wrong, the validator caught it loudly and the fix was a
+documented config/contract change — not a silent patch.
+
+---
+
 ## 2026-06-27 — Phase 6: Airflow DAG orchestration
 
 **What I built**

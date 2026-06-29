@@ -125,6 +125,10 @@ class FeatureConfig:
     partition_by: str
     price_premium_min: float
     price_premium_max: float
+    # Lower bound for days_since_release. 0 for the synthetic fixtures; negative
+    # for real data, where pre-release ("early pair") sales legitimately trade
+    # before the official drop. Defaulted so existing callers stay valid.
+    days_since_release_min: int = 0
 
 
 def load_feature_config(config_path: str) -> FeatureConfig:
@@ -148,4 +152,5 @@ def load_feature_config(config_path: str) -> FeatureConfig:
         partition_by=str(raw["partition_by"]),
         price_premium_min=float(raw["price_premium_min"]),
         price_premium_max=float(raw["price_premium_max"]),
+        days_since_release_min=int(raw.get("days_since_release_min", 0)),
     )

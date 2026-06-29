@@ -229,6 +229,7 @@ def run(
     config: PipelineConfig,
     num_workers: int = 1,
     model_config: dict | None = None,
+    split_year: int = SPLIT_YEAR,
 ) -> str:
     """Train the model and log it. Returns the MLflow run_id."""
     import mlflow
@@ -239,7 +240,7 @@ def run(
     from models.net import ModelConfig
 
     df = read_parquet(config.validated_uri())
-    arrays = prepare_arrays(df, SPLIT_YEAR)
+    arrays = prepare_arrays(df, split_year)
     mcfg = ModelConfig(**model_config) if model_config else ModelConfig()
 
     loop_config = {
@@ -269,7 +270,7 @@ def run(
                 **asdict(mcfg),
                 "num_workers": num_workers,
                 "run_date": config.run_date,
-                "split_year": SPLIT_YEAR,
+                "split_year": split_year,
                 "n_features": len(FEATURE_COLUMNS),
                 "n_train_rows": len(arrays.y_train),
                 "n_val_rows": len(arrays.y_val),
@@ -327,11 +328,17 @@ def main() -> None:
     parser.add_argument("--run-date", required=True, help="ISO run date (YYYY-MM-DD).")
     parser.add_argument("--config", default="config/pipeline_config.yaml")
     parser.add_argument("--num-workers", type=int, default=1, help="Ray workers.")
+    parser.add_argument(
+        "--split-year",
+        type=int,
+        default=SPLIT_YEAR,
+        help="Temporal train/val boundary: sales < year train, >= year validate.",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
     config = load_config(args.config, run_date=args.run_date)
-    run_id = run(config, num_workers=args.num_workers)
+    run_id = run(config, num_workers=args.num_workers, split_year=args.split_year)
     logger.info("training stage complete, mlflow run_id=%s", run_id)
 
 

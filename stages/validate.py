@@ -49,7 +49,6 @@ from stages.io import read_parquet, write_json, write_parquet
 
 logger = logging.getLogger("stages.validate")
 
-KEY_COLUMNS = ["shoe_id", "sale_date", "size_us"]
 MIN_ROW_RETENTION_PCT = 90.0
 
 
@@ -75,11 +74,6 @@ def _rolling_null_consistency(window_days: int):
     return check
 
 
-def _unique_keys(df: pd.DataFrame) -> pd.Series:
-    """Wide check: no duplicate (shoe_id, sale_date, size_us). Dup rows fail."""
-    return ~df.duplicated(subset=KEY_COLUMNS, keep=False)
-
-
 def build_schema(fcfg: FeatureConfig) -> pa.DataFrameSchema:
     """Build the Pandera schema for the features dataset."""
     release_types = list(fcfg.release_type_order.keys())
@@ -102,7 +96,9 @@ def build_schema(fcfg: FeatureConfig) -> pa.DataFrameSchema:
                 ),
                 nullable=False,
             ),
-            "days_since_release": pa.Column(int, pa.Check.ge(0), nullable=False),
+            "days_since_release": pa.Column(
+                int, pa.Check.ge(fcfg.days_since_release_min), nullable=False
+            ),
             "size_premium": pa.Column(float, nullable=False),
             "release_type_encoded": pa.Column(
                 int, pa.Check.isin(encoded_ranks), nullable=False
@@ -121,10 +117,10 @@ def build_schema(fcfg: FeatureConfig) -> pa.DataFrameSchema:
                     f"has < {fcfg.rolling_window_days} days of history"
                 ),
             ),
-            pa.Check(
-                _unique_keys,
-                error="duplicate (shoe_id, sale_date, size_us) combinations",
-            ),
+            # Note: the unique key is sale_id (enforced above), NOT
+            # (shoe_id, sale_date, size_us). Real resale data legitimately has
+            # multiple sales of the same shoe/size on the same day, so a
+            # composite-key uniqueness check would reject valid transaction data.
         ],
         strict=True,   # no unexpected columns
         coerce=True,   # normalise int32/datetime64[us]/category to declared types

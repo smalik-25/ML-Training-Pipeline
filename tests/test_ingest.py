@@ -11,7 +11,7 @@ import pandas as pd
 
 from generate_fixtures import build_fixtures
 from stages.config import PipelineConfig
-from stages.ingest import PG_TABLE_NAMES, run
+from stages.ingest import LOGICAL_TABLES, run
 from stages.io import read_parquet
 
 EXPECTED_COLUMNS = {
@@ -47,7 +47,7 @@ def test_ingest_lands_all_tables_from_fixtures(tmp_path) -> None:
     config = _config(str(tmp_path / "lake"))
     written = run(config, dsn=None, fixtures_dir=fixtures_dir)
 
-    assert set(written) == set(PG_TABLE_NAMES)
+    assert set(written) == set(LOGICAL_TABLES)
 
     for table, uri in written.items():
         landed = read_parquet(uri)

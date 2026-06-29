@@ -15,11 +15,11 @@ rolling_window_days: 7
 search_signal_window_days: 7
 
 # Ordinal encoding for release_type (scarcer -> higher). Drives
-# release_type_encoded.
+# release_type_encoded. Values match the sneaker-intel dim_drops CHECK
+# constraint: release_type in ('general', 'limited', 'collab').
 release_type_order:
-  limited: 3
-  raffle: 2
-  fcfs: 1
+  limited: 2
+  collab: 1
   general: 0
 
 # Output partitioning. Writing partitioned by brand lets downstream training
@@ -29,5 +29,14 @@ partition_by: "brand"
 
 # Bounds used to sanity-check engineered features (the Pandera stage in Phase 3
 # enforces these as hard checks; duplicated intent, single source of numbers).
+# Upper bound is 50: real StockX resale of hyped Off-White / Yeezy pairs reaches
+# ~20-25x retail, so 20 would reject legitimate sales. >50x is treated as a data
+# error. (Synthetic fixtures stay well under 2x.)
 price_premium_min: -1.0
-price_premium_max: 20.0
+price_premium_max: 50.0
+
+# Lower bound for days_since_release. Real resale data has "early pair" sales
+# that trade up to ~2 months before the official drop (observed min -69 days on
+# the StockX data), so we allow a bounded pre-release window; anything earlier
+# than -90 days is treated as a data error. Synthetic fixtures stay >= 0.
+days_since_release_min: -90

@@ -37,10 +37,10 @@ def fcfg() -> FeatureConfig:
     return FeatureConfig(
         rolling_window_days=7,
         search_signal_window_days=7,
-        release_type_order={"limited": 3, "raffle": 2, "fcfs": 1, "general": 0},
+        release_type_order={"limited": 2, "collab": 1, "general": 0},
         partition_by="brand",
         price_premium_min=-1.0,
-        price_premium_max=20.0,
+        price_premium_max=50.0,
     )
 
 
