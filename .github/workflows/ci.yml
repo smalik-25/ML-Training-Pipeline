@@ -1,8 +1,9 @@
 name: CI
 
-# CI runs against synthetic fixtures ONLY. It never touches real S3 or the live
-# sneaker-intel Postgres. The lint + DAG-import job installs only the light
-# extras (airflow, dev) so it stays fast and never resolves Spark/Ray/Torch.
+# CI runs against synthetic fixtures / temp dirs ONLY. It never touches real S3,
+# the real sneaker-intel Postgres, or the committed data/ tree. Each job installs
+# only the extras its tests need, so the light jobs stay fast and the heavy
+# frameworks (Spark, Torch, Ray) are isolated to the jobs that exercise them.
 
 on:
   push:
@@ -11,42 +12,77 @@ on:
     branches: [main]
 
 jobs:
-  lint-and-test:
+  lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-
-      - name: Install core + dev (no heavy frameworks)
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[dev]"
-
-      - name: Lint (ruff)
+      - run: pip install --upgrade pip && pip install -e ".[dev]"
+      - name: Ruff
         run: ruff check .
 
-      - name: Unit tests (fixtures only)
-        run: pytest
-
-  dag-integrity:
+  unit-core:
+    # Fast tests with no heavy frameworks: I/O layer, ingest (fixture mode),
+    # Pandera validation, config.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+      - run: pip install --upgrade pip && pip install -e ".[dev]"
+      - name: Core unit tests
+        run: pytest tests/test_io.py tests/test_ingest.py tests/test_validate.py
 
-      - name: Install Airflow with constraints + core
+  spark-tests:
+    # Feature engineering stage -- needs PySpark + a JRE.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - run: pip install --upgrade pip && pip install -e ".[spark,dev]"
+      - name: Feature stage tests (PySpark)
+        env:
+          SPARK_LOCAL_IP: 127.0.0.1
+        run: pytest tests/test_features.py
+
+  train-tests:
+    # Training + registry stages -- needs Torch, Ray, and MLflow.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install --upgrade pip && pip install -e ".[train,dev]"
+      - name: Train + register tests (Torch/Ray/MLflow)
+        run: pytest tests/test_train.py tests/test_register.py
+
+  dag-integrity:
+    # DAG structure + a hard import check, with Airflow pinned via its
+    # official constraints file.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install Airflow (constraints) + core
         run: |
           python -m pip install --upgrade pip
           pip install "apache-airflow==2.9.3" \
             -c "https://raw.githubusercontent.com/apache/airflow/constraints-2.9.3/constraints-3.11.txt"
           pip install -e ".[dev]"
-
+      - name: DAG structure tests
+        run: pytest tests/test_dag.py
       - name: DAG imports without errors
         run: |
           python -c "import importlib; importlib.import_module('dags.sneaker_training_pipeline'); print('DAG import OK')"

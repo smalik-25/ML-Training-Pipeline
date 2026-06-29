@@ -98,6 +98,23 @@ leave it unset and run on synthetic fixtures (the default dev/CI path). The 99K
 real rows are the production story; fixtures make the whole pipeline runnable
 and testable with one command.
 
+To run on real data: bring up the sneaker-intel Postgres (`make db-up && make
+db-init && make load` in that repo), then in this repo `pip install -e ".[ingest]"`,
+`export SNEAKER_INTEL_DSN=postgresql://sneaker:sneaker@localhost:5432/sneaker_intel`,
+and run the stages with `--run-date <date>` (use `--split-year 2019` at train,
+since the StockX data is 2017–2019).
+
+## Results on real data
+
+Ran end-to-end on the live warehouse — **99,956 StockX sales** (Off-White + Yeezy,
+2017–2019). Validation passed at **100% row retention**, and the model trained to
+**val RMSE ≈ 0.21** (premium scale 0–20) on an 84/16 temporal split at 2019, then
+registered and promoted to `@staging` as v1. Connecting real data surfaced four
+contract mismatches the synthetic data hid — release-type vocabulary, premium
+outliers (max 20.3× retail, over the old ceiling), transaction grain, and
+pre-release sales — each caught by the validator and fixed as a documented config
+change. See [`DEVLOG.md`](./DEVLOG.md) and [`docs/architecture.md`](./docs/architecture.md).
+
 ## Build progress
 
 - [x] **Phase 0** — Project scaffold, shared I/O layer, config, packaging, CI skeleton
@@ -107,7 +124,8 @@ and testable with one command.
 - [x] **Phase 4** — PyTorch model & Ray Train + MLflow
 - [x] **Phase 5** — MLflow model registry & promotion logic
 - [x] **Phase 6** — Airflow DAG orchestration
-- [ ] **Phase 7** — Docker, CI/CD, and docs polish
+- [x] **Phase 7** — Docker, CI/CD, and docs polish
+- [x] **Real-data integration** — runs end-to-end on the live sneaker-intel warehouse (99,956 StockX sales)
 
 ## Design decisions
 

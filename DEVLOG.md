@@ -5,6 +5,60 @@ entries at the top.
 
 ---
 
+## 2026-06-28 — Phase 7: Docker, CI/CD, docs — and a build retrospective
+
+**What I built**
+
+Closed out the build: a clean multi-stage `Dockerfile` (one image runs any stage
+via `entrypoint.sh`, installs `[spark,train,ingest]`, JRE for Spark), a CI
+workflow split into focused jobs (lint, core unit tests, a Spark job with a JRE,
+a Torch/Ray/MLflow job, and a DAG-integrity job with Airflow pinned to its
+constraints file), and a finalized `docs/architecture.md` (topology, per-prefix
+data flow, the anti-corruption ingest layer, and the full design-decisions
+section including the real-data reconciliation). README checklist is complete and
+carries the real-data results.
+
+**Why the CI is split this way.** The whole point of the Phase 0 dependency-extra
+split pays off here: each job installs only what its tests need, so the light
+jobs stay fast and the heavy frameworks are quarantined to the jobs that actually
+exercise them. The `importorskip` guards mean nothing breaks at collection when a
+framework is absent — the Spark/train tests simply run in their own jobs. CI never
+touches real S3, the real Postgres, or the committed `data/` tree.
+
+**Dockerfile fix worth noting.** The Phase 0 Dockerfile copied only
+`pyproject.toml` before `pip install ".[...]"`, so the build silently fell back
+to `requirements.txt` (dragging in Airflow + dev). Now it copies the package
+sources and installs the stage-runner extras properly; the package lands in the
+venv and is importable at runtime without PYTHONPATH gymnastics.
+
+**Retrospective — what this project demonstrates.** Seven phases plus a real-data
+integration, each shipped as one reviewable unit with a DEVLOG rationale:
+
+- A data lake with an fsspec-resolved I/O seam (`s3://` vs local), Parquet
+  everywhere, timestamps coerced for cross-engine (pyarrow ↔ Spark) reads.
+- PySpark feature engineering with broadcast joins, a brand partition, and a
+  time-range rolling window with deliberate null semantics.
+- A Pandera data contract that fails loudly — and proved its worth by catching
+  four real-data surprises the synthetic fixtures hid.
+- Distributed training via Ray `TorchTrainer` with leakage-safe, checkpoint-saved
+  preprocessing and a temporal split.
+- An MLflow registry with strict, logged promotion (aliases, not deprecated
+  stages).
+- An Airflow DAG with thin tasks, lazy imports, XCom lineage, retries/SLA, and a
+  failure callback.
+- And the seam that ties it to reality: ingest as an anti-corruption layer over
+  the actual sneaker-intel star schema, run end-to-end on 99,956 real sales.
+
+The through-line is the same in every phase: stages are independent and
+CLI-runnable, config is the single source of truth, the data contract is explicit
+and loud, and every non-obvious decision is written down. The model is simple on
+purpose — the reliability, reproducibility, and scalability of the pipeline around
+it are the deliverable.
+
+**Build complete.**
+
+---
+
 ## 2026-06-28 — Real-data integration: reconciling with the sneaker-intel schema
 
 **What happened**
