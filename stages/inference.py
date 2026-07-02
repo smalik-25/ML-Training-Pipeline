@@ -54,7 +54,9 @@ def build_matrix(
     using the persisted stats instead of recomputing them, so training and
     serving preprocessing cannot diverge.
     """
-    x = df[feature_columns].to_numpy(dtype=float)
+    # copy=True: to_numpy() can return a read-only view on newer pandas/numpy,
+    # and we assign into it below.
+    x = df[feature_columns].to_numpy(dtype=float, copy=True)
     rows, cols = np.where(np.isnan(x))
     x[rows, cols] = np.take(impute_values, cols)
     return (x - feature_mean) / feature_std
