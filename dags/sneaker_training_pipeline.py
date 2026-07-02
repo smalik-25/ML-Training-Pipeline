@@ -61,6 +61,7 @@ TASK_EXPECTED_OUTPUT = {
     "validate": "validated/{run_date}/features_validated.parquet + validation_report.json",
     "train": "models/{run_date}/{run_id}/model.pt + tracked MLflow run",
     "register": "models/{run_date}/{run_id}/promotion_report.json + staging alias",
+    "score": "predictions/{run_date}/predictions.parquet + scoring_report.json",
 }
 
 
@@ -145,6 +146,15 @@ def _register(**context) -> str:
     return register.run(config)  # promotion_report uri -> XCom
 
 
+def _score(**context) -> str:
+    from stages import score
+
+    config = _build_config(context["ds"])
+    report_uri = context["ti"].xcom_pull(task_ids="register")
+    log.info("score stage consuming register report from XCom: %s", report_uri)
+    return score.run(config)  # predictions uri -> XCom
+
+
 default_args = {
     "owner": "ml-platform",
     "retries": 2,
@@ -171,5 +181,13 @@ with DAG(
     validate_task = PythonOperator(task_id="validate", python_callable=_validate)
     train_task = PythonOperator(task_id="train", python_callable=_train)
     register_task = PythonOperator(task_id="register", python_callable=_register)
+    score_task = PythonOperator(task_id="score", python_callable=_score)
 
-    ingest_task >> feature_task >> validate_task >> train_task >> register_task
+    (
+        ingest_task
+        >> feature_task
+        >> validate_task
+        >> train_task
+        >> register_task
+        >> score_task
+    )

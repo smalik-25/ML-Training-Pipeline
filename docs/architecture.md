@@ -26,11 +26,16 @@ flowchart TD
     M --> RG["register<br/>MLflow registry"]
     ML --> RG
     RG --> AL["sneaker-price-model<br/>@staging"]
+    AL --> SC["score<br/>batch, staging model"]
+    VD --> SC
+    SC --> PR[("predictions<br/>by run_date")]
+    AL --> SV["serving<br/>FastAPI /predict"]
     AIR["Airflow DAG"] -.->|"orchestrates; XCom paths"| I
     AIR -.-> F
     AIR -.-> V
     AIR -.-> T
     AIR -.-> RG
+    AIR -.-> SC
 ```
 
 Each stage runs on its own from the CLI and talks to the next one only through
@@ -48,6 +53,7 @@ All paths come from `storage_root` in `config/pipeline_config.yaml` via
 | `features/{run_date}/` | features | Flat engineered feature table, Hive-partitioned by `brand` |
 | `validated/{run_date}/` | validate | Validated features + `validation_report.json` |
 | `models/{run_date}/{run_id}/` | train, register | `model.pt` (weights + preprocessing) + `promotion_report.json` |
+| `predictions/{run_date}/` | score | `predictions.parquet` + `scoring_report.json` |
 | `failures/{run_date}/` | DAG callback | Per-task failure summaries on any task failure |
 
 The model artifact also goes to the MLflow tracking store (SQLite locally, or the
@@ -77,6 +83,23 @@ canonical (earliest) drop up onto the shoe row. The Parquet it lands is
 byte-compatible with the synthetic fixtures, so features, validate, train, and
 register never learn where the data came from. The fixtures run through the same
 downstream code, which is what makes dev and CI faithful without a database.
+
+## Serving and batch scoring
+
+Training and promotion produce a *deployed* model, and two consumers use it. The
+batch scoring stage (`stages/score.py`) and the FastAPI app (`serving/app.py`)
+both load whatever version sits at the `staging` alias and score with it. The
+batch stage writes predictions to `predictions/{run_date}/` and reports RMSE
+against ground truth when the batch is labeled; the API serves single or batch
+predictions online.
+
+Both go through one module, `stages/inference.py`, which is the point. It loads
+the `model.pt` (weights plus the imputation and standardization stats fit on the
+training split) and applies those saved stats at inference. There is no second
+copy of the preprocessing to drift, so an online request and a batch row get
+byte-identical treatment. The registry alias is the source of truth for which
+model is live: to roll back, you move the alias, and both consumers pick it up on
+their next load.
 
 ## Design decisions
 

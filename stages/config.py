@@ -34,6 +34,8 @@ class PipelineConfig:
     models_prefix: str
     failures_prefix: str
     run_date: str
+    # Defaulted so existing callers/tests that don't set it stay valid.
+    predictions_prefix: str = "predictions"
 
     def raw_uri(self, table: str) -> str:
         """URI for a raw landed table, e.g. raw_uri('sales')."""
@@ -78,6 +80,22 @@ class PipelineConfig:
             f"{task}.json",
         )
 
+    def predictions_uri(self) -> str:
+        return path_join(
+            self.storage_root,
+            self.predictions_prefix,
+            self.run_date,
+            "predictions.parquet",
+        )
+
+    def scoring_report_uri(self) -> str:
+        return path_join(
+            self.storage_root,
+            self.predictions_prefix,
+            self.run_date,
+            "scoring_report.json",
+        )
+
 
 def load_config(config_path: str, run_date: str | None = None) -> PipelineConfig:
     """Load and resolve pipeline config from a YAML file.
@@ -108,6 +126,7 @@ def load_config(config_path: str, run_date: str | None = None) -> PipelineConfig
         models_prefix=raw["models_prefix"],
         failures_prefix=raw["failures_prefix"],
         run_date=str(resolved_run_date),
+        predictions_prefix=raw.get("predictions_prefix", "predictions"),
     )
 
 

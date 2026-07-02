@@ -24,6 +24,7 @@ data/features/
 data/validated/
 data/models/
 data/failures/
+data/predictions/
 *.parquet
 *.pt
 mlruns/

@@ -18,6 +18,7 @@ features_prefix: "features"
 validated_prefix: "validated"
 models_prefix: "models"
 failures_prefix: "failures"
+predictions_prefix: "predictions"
 
 # Default run date. CLI --run-date overrides this; if both are absent the
 # stage falls back to today's date.

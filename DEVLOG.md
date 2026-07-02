@@ -4,6 +4,56 @@ Notes on what I built and why, newest entries first.
 
 ---
 
+## Closing the loop: batch scoring and online serving
+
+**What I built**
+
+`stages/score.py` (a batch scoring stage that runs after register in the DAG),
+`serving/app.py` (a FastAPI app), and `stages/inference.py`, which both of them
+share. Plus a `predictions/{run_date}/` prefix in the config, a `serving` extra
+in pyproject, `score` and `serve` Makefile targets, and tests for all three.
+Suite is now 39 passed / 4 skipped locally, ruff clean. The 4 skips are the
+torch/fastapi paths that run on my machine, not in the build sandbox.
+
+**Why this was the right next thing.** Before this, the pipeline trained and
+registered a model that nothing consumed. The registry alias existed but didn't
+mean anything. Scoring and serving are what make "promoted to staging" a real
+event: the batch stage reads whatever version sits at the `staging` alias and
+scores the run_date's features, and the API serves that same model online.
+
+**Design decisions**
+
+- **One inference module for both consumers.** Batch and online both go through
+  `stages/inference.py`. That's deliberate. The train stage saves the imputation
+  and standardization stats (fit on the training split) inside `model.pt`, and
+  inference applies those saved stats rather than recomputing them. There is no
+  second implementation of the preprocessing to drift, so a batch row and an API
+  request get byte-identical treatment. This is the no-training/serving-skew
+  guarantee made concrete instead of asserted.
+- **The registry alias is the source of truth for what's live.** Neither consumer
+  hardcodes a model path. They resolve the `staging` alias to a run, read the
+  `model_s3_uri` the train stage logged, and load through the same fsspec I/O
+  layer everything else uses. Rolling back a bad model is an alias move, and both
+  consumers pick it up on their next load.
+- **`build_matrix` is torch-free.** The transform is numpy-only so it's unit
+  tested without installing torch; the model load and forward pass import torch
+  lazily. Same pattern as the rest of the project: keep the pure logic testable
+  in the light path, gate the heavy frameworks.
+- **The API takes engineered features, and nullable ones are imputed.** Feature
+  computation is an upstream Spark concern, so the endpoint accepts the same
+  columns the model trained on. The nullable features (rolling average, pre-drop
+  search) can be omitted and get the saved training means, exactly as in
+  training.
+
+**Next up**
+
+Natural follow-ons if I keep going: a drift-detection stage comparing incoming
+feature distributions against training, and a retrain trigger that only fires
+when drift crosses a threshold. That would close the monitor-and-retrain half of
+the loop.
+
+---
+
 ## Phase 7: Docker, CI/CD, docs, and a build retrospective
 
 **What I built**

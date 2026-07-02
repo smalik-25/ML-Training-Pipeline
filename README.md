@@ -65,11 +65,28 @@ make features RUN_DATE=2025-01-01
 make validate RUN_DATE=2025-01-01
 make train    RUN_DATE=2025-01-01
 make register RUN_DATE=2025-01-01
-make pipeline RUN_DATE=2025-01-01 # all stages in order
+make score    RUN_DATE=2025-01-01   # batch-score with the @staging model
+make pipeline RUN_DATE=2025-01-01   # all stages in order
 ```
 
 Each stage is also a module entrypoint, e.g.
 `python -m stages.features --run-date 2025-01-01 --config config/pipeline_config.yaml`.
+
+## Serving the model
+
+The batch scoring stage and a FastAPI app both load the model at the MLflow
+`staging` alias and reuse the preprocessing saved inside `model.pt`, so online and
+batch predictions run the exact same transform (no training/serving skew).
+
+```bash
+pip install -e ".[train,serving]"
+make serve          # FastAPI at http://localhost:8000, docs at /docs
+# or point it at a specific artifact instead of the registry:
+MODEL_URI=data/models/2026-06-28/<run_id>/model.pt make serve
+```
+
+`GET /health` reports the loaded model version; `POST /predict` scores one sale's
+engineered features; `POST /predict/batch` scores a list.
 
 ## Running the full DAG
 
@@ -177,3 +194,8 @@ narrative; this is the short version.
   XCom threads the artifact lineage (config stays the source of truth), a
   validation failure fails the whole run, and an `on_failure_callback` writes to
   the `failures/` prefix.
+- **One inference path for batch and online.** The scoring stage and the serving
+  API both load the `@staging` model through the same `stages/inference.py` and
+  apply the preprocessing saved in `model.pt`, so a batch row and an API request
+  get identical treatment. The registry alias is the source of truth for which
+  model is live, so a rollback is an alias move.

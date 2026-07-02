@@ -22,13 +22,14 @@ EXPECTED_TASKS = {
     "validate",
     "train",
     "register",
+    "score",
 }
 
 
 def test_dag_loads_with_expected_tasks() -> None:
     assert dag.dag_id == "sneaker_training_pipeline"
     assert set(dag.task_ids) == EXPECTED_TASKS
-    assert len(dag.tasks) == 5
+    assert len(dag.tasks) == 6
 
 
 def test_linear_dependency_chain() -> None:
@@ -37,7 +38,8 @@ def test_linear_dependency_chain() -> None:
         "feature_engineering": {"validate"},
         "validate": {"train"},
         "train": {"register"},
-        "register": set(),
+        "register": {"score"},
+        "score": set(),
     }
     for task_id, downstream in expected_downstream.items():
         assert dag.get_task(task_id).downstream_task_ids == downstream
@@ -56,8 +58,8 @@ def test_sla_and_failure_callback_configured() -> None:
         assert task.on_failure_callback is not None
 
 
-def test_ingest_is_root_register_is_leaf() -> None:
+def test_ingest_is_root_score_is_leaf() -> None:
     roots = {t.task_id for t in dag.roots}
     leaves = {t.task_id for t in dag.leaves}
     assert roots == {"ingest"}
-    assert leaves == {"register"}
+    assert leaves == {"score"}
