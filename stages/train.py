@@ -334,11 +334,34 @@ def main() -> None:
         default=SPLIT_YEAR,
         help="Temporal train/val boundary: sales < year train, >= year validate.",
     )
+    # Hyperparameter overrides (any omitted flag keeps the ModelConfig default).
+    # Useful for a sweep: vary these across runs to populate the MLflow compare view.
+    parser.add_argument("--epochs", type=int, default=None)
+    parser.add_argument("--hidden-dim", type=int, default=None)
+    parser.add_argument("--lr", type=float, default=None, help="Learning rate.")
+    parser.add_argument("--batch-size", type=int, default=None)
+    parser.add_argument("--dropout", type=float, default=None, help="Dropout rate.")
     args = parser.parse_args()
+
+    # Only pass through flags the user actually set, so unset ones fall back to
+    # the ModelConfig defaults.
+    overrides = {
+        "num_epochs": args.epochs,
+        "hidden_dim": args.hidden_dim,
+        "learning_rate": args.lr,
+        "batch_size": args.batch_size,
+        "dropout_rate": args.dropout,
+    }
+    model_config = {k: v for k, v in overrides.items() if v is not None} or None
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
     config = load_config(args.config, run_date=args.run_date)
-    run_id = run(config, num_workers=args.num_workers, split_year=args.split_year)
+    run_id = run(
+        config,
+        num_workers=args.num_workers,
+        model_config=model_config,
+        split_year=args.split_year,
+    )
     logger.info("training stage complete, mlflow run_id=%s", run_id)
 
 
