@@ -29,7 +29,11 @@ def test_score_run_writes_predictions_and_report(tmp_path, monkeypatch) -> None:
     from stages.io import path_join, read_json, read_parquet, write_bytes, write_parquet
     from stages.train import FEATURE_COLUMNS, TARGET
 
-    monkeypatch.setenv("MLFLOW_TRACKING_URI", f"sqlite:///{tmp_path}/mlflow.db")
+    tracking = f"sqlite:///{tmp_path}/mlflow.db"
+    monkeypatch.setenv("MLFLOW_TRACKING_URI", tracking)
+    # Pin the global tracking URI so seeding lands in THIS test's DB. A prior
+    # test's set_tracking_uri() would otherwise take precedence over the env var.
+    mlflow.set_tracking_uri(tracking)
     monkeypatch.chdir(tmp_path)
 
     config = PipelineConfig(
@@ -67,7 +71,7 @@ def test_score_run_writes_predictions_and_report(tmp_path, monkeypatch) -> None:
         mlflow.log_param("run_date", "run")
         run_id = active.info.run_id
         artifact_uri = active.info.artifact_uri
-    client = MlflowClient()
+    client = MlflowClient(tracking)
     client.create_registered_model(MODEL_NAME)
     version = client.create_model_version(MODEL_NAME, source=artifact_uri, run_id=run_id)
     client.set_registered_model_alias(MODEL_NAME, STAGING_ALIAS, version.version)
