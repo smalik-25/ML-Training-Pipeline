@@ -54,6 +54,7 @@ All paths come from `storage_root` in `config/pipeline_config.yaml` via
 | `validated/{run_date}/` | validate | Validated features + `validation_report.json` |
 | `models/{run_date}/{run_id}/` | train, register | `model.pt` (weights + preprocessing) + `promotion_report.json` |
 | `predictions/{run_date}/` | score | `predictions.parquet` + `scoring_report.json` |
+| `drift/{run_date}/` | monitor | `drift_report.json` (per-feature PSI + decision) |
 | `failures/{run_date}/` | DAG callback | Per-task failure summaries on any task failure |
 
 The model artifact also goes to the MLflow tracking store (SQLite locally, or the
@@ -100,6 +101,30 @@ copy of the preprocessing to drift, so an online request and a batch row get
 byte-identical treatment. The registry alias is the source of truth for which
 model is live: to roll back, you move the alias, and both consumers pick it up on
 their next load.
+
+## Monitoring and retraining
+
+A second, scheduled DAG (`dags/drift_monitor.py`) watches for the data moving out
+from under the deployed model. On its cadence it lands and validates the latest
+data, then the monitoring stage (`stages/monitor.py`) compares the new feature
+distributions against the ones the current `staging` model was trained on, using
+PSI (Population Stability Index) per feature. If any feature's PSI clears the
+threshold, a `ShortCircuitOperator` lets the run continue and a
+`TriggerDagRunOperator` fires the training pipeline; if not, it short-circuits and
+nothing retrains.
+
+The point is that retraining is driven by evidence, not a blind cron. The
+reference distribution is resolved from the registry (the run that produced the
+staging model), so "has the data drifted" always means "drifted from what the
+live model actually learned". If there's no staging model yet, the stage reports
+drift so the first model gets trained.
+
+```mermaid
+flowchart LR
+    ING["ingest"] --> FEA["features"] --> VAL["validate"] --> DET["detect_drift<br/>PSI vs staging baseline"]
+    DET -->|"drift"| TRG["trigger<br/>sneaker_training_pipeline"]
+    DET -->|"no drift"| STOP["short-circuit<br/>no retrain"]
+```
 
 ## Design decisions
 

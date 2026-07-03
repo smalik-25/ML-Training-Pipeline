@@ -4,6 +4,53 @@ Notes on what I built and why, newest entries first.
 
 ---
 
+## Monitoring and retrain-on-drift
+
+**What I built**
+
+`stages/monitor.py` (a drift-detection stage) and `dags/drift_monitor.py` (a
+scheduled DAG that retrains only when the data has drifted). Plus a `drift/`
+prefix, a `monitor` Makefile/entrypoint target, and `tests/test_monitor.py`. The
+drift tests are numpy-only, so they run in the light CI job.
+
+**Why it's the piece worth adding.** The training pipeline already produced a
+deployed model, and scoring and serving consumed it, but nothing watched whether
+the model was going stale. This is that watcher, and it closes the loop:
+train, register, serve, monitor, retrain.
+
+**Design decisions**
+
+- **PSI, not a heavyweight drift library.** I compute Population Stability Index
+  per feature by hand (numpy histograms over reference quantiles). PSI is the
+  standard drift measure (< 0.1 stable, 0.1–0.2 moderate, > 0.2 significant), and
+  hand-rolling it keeps the stage torch-free, dependency-light, and fully
+  testable without installing Evidently or scipy. Constant features return 0
+  rather than dividing by zero.
+- **The reference is the deployed model's training data.** By default the stage
+  resolves the reference distribution from the registry: the run that produced
+  the current `staging` model. So "has the data drifted" always means "drifted
+  from what the live model actually learned", not from some arbitrary snapshot.
+  If there's no staging model yet, there's no baseline, so it reports drift and
+  the first model gets trained.
+- **Retrain on evidence, not on a schedule.** The monitoring DAG runs on a cron,
+  but the retrain doesn't. A `ShortCircuitOperator` runs the drift check and lets
+  the run proceed only if a feature clears the threshold; then a
+  `TriggerDagRunOperator` fires the training pipeline. No drift means no retrain.
+  This is the difference between "retrain nightly and hope" and "retrain when the
+  data says to".
+- **No duplicated wiring.** The monitoring DAG imports the training DAG's thin
+  ingest/features/validate callables instead of redefining them, so the two DAGs
+  share one definition of each stage's orchestration.
+
+**Next up**
+
+The honest remaining pre-deploy items are all infrastructure: one real run
+against S3 and the Postgres+S3 MLflow server to prove the storage abstraction,
+secrets management, and hosting the serving container. Those demonstrate cloud
+ops rather than ML platform design, so I'm treating them as optional.
+
+---
+
 ## Serving correctness: startup load and alias reload
 
 Two fixes to the serving app before it could honestly be called deployable, both

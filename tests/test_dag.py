@@ -14,6 +14,7 @@ import pytest
 
 pytest.importorskip("airflow")
 
+from dags.drift_monitor import dag as drift_dag  # noqa: E402
 from dags.sneaker_training_pipeline import dag  # noqa: E402
 
 EXPECTED_TASKS = {
@@ -63,3 +64,35 @@ def test_ingest_is_root_score_is_leaf() -> None:
     leaves = {t.task_id for t in dag.leaves}
     assert roots == {"ingest"}
     assert leaves == {"score"}
+
+
+# --- drift monitor DAG ---------------------------------------------------------
+
+def test_drift_dag_structure() -> None:
+    assert drift_dag.dag_id == "sneaker_drift_monitor"
+    assert set(drift_dag.task_ids) == {
+        "ingest",
+        "feature_engineering",
+        "validate",
+        "detect_drift",
+        "trigger_training",
+    }
+    expected_downstream = {
+        "ingest": {"feature_engineering"},
+        "feature_engineering": {"validate"},
+        "validate": {"detect_drift"},
+        "detect_drift": {"trigger_training"},
+        "trigger_training": set(),
+    }
+    for task_id, downstream in expected_downstream.items():
+        assert drift_dag.get_task(task_id).downstream_task_ids == downstream
+
+
+def test_drift_dag_gate_and_trigger() -> None:
+    from airflow.operators.python import ShortCircuitOperator
+    from airflow.operators.trigger_dagrun import TriggerDagRunOperator
+
+    assert isinstance(drift_dag.get_task("detect_drift"), ShortCircuitOperator)
+    trigger = drift_dag.get_task("trigger_training")
+    assert isinstance(trigger, TriggerDagRunOperator)
+    assert trigger.trigger_dag_id == "sneaker_training_pipeline"

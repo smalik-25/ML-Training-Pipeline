@@ -203,3 +203,8 @@ narrative; this is the short version.
   apply the preprocessing saved in `model.pt`, so a batch row and an API request
   get identical treatment. The registry alias is the source of truth for which
   model is live, so a rollback is an alias move.
+- **Retrain on drift, not on a cron.** A scheduled monitoring DAG
+  (`dags/drift_monitor.py`) computes per-feature PSI against the distribution the
+  `@staging` model was trained on. It triggers the training pipeline only when a
+  feature clears the drift threshold, and short-circuits otherwise. `make monitor`
+  runs the check on its own.

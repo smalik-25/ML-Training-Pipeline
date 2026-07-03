@@ -34,7 +34,9 @@ jobs:
           python-version: "3.11"
       - run: pip install --upgrade pip && pip install -e ".[dev]"
       - name: Core unit tests
-        run: pytest tests/test_io.py tests/test_ingest.py tests/test_validate.py tests/test_inference.py
+        run: >
+          pytest tests/test_io.py tests/test_ingest.py tests/test_validate.py
+          tests/test_inference.py tests/test_monitor.py
 
   spark-tests:
     # Feature engineering stage -- needs PySpark + a JRE.
@@ -85,6 +87,6 @@ jobs:
           pip install -e ".[dev]"
       - name: DAG structure tests
         run: pytest tests/test_dag.py
-      - name: DAG imports without errors
+      - name: DAGs import without errors
         run: |
-          python -c "import importlib; importlib.import_module('dags.sneaker_training_pipeline'); print('DAG import OK')"
+          python -c "import importlib; importlib.import_module('dags.sneaker_training_pipeline'); importlib.import_module('dags.drift_monitor'); print('DAG imports OK')"

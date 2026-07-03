@@ -6,7 +6,7 @@ set -euo pipefail
 
 if [[ $# -eq 0 || "${1:-}" == "--help" ]]; then
   echo "usage: <stage> [args...]"
-  echo "stages: ingest | features | validate | train | register | fixtures"
+  echo "stages: ingest | features | validate | train | register | score | monitor | fixtures"
   exit 0
 fi
 
@@ -17,6 +17,8 @@ case "$stage" in
   validate) exec python -m stages.validate "$@" ;;
   train)    exec python -m stages.train "$@" ;;
   register) exec python -m stages.register "$@" ;;
+  score)    exec python -m stages.score "$@" ;;
+  monitor)  exec python -m stages.monitor "$@" ;;
   fixtures) exec python generate_fixtures.py "$@" ;;
   *)
     echo "unknown stage: $stage" >&2

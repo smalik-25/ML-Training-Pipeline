@@ -8,8 +8,8 @@ CONFIG   ?= config/pipeline_config.yaml
 PYTHON   ?= python
 
 .PHONY: help fixtures ingest features validate train register score serve \
-        pipeline airflow-up airflow-down mlflow-up mlflow-down minio-up \
-        minio-down test lint format install
+        monitor pipeline airflow-up airflow-down mlflow-up mlflow-down \
+        minio-up minio-down test lint format install
 
 help:
 	@grep -E '^[a-zA-Z_-]+:.*?##' $(MAKEFILE_LIST) | \
@@ -38,6 +38,9 @@ register: ## Run the model registration stage
 
 score: ## Batch-score with the staging model
 	$(PYTHON) -m stages.score --run-date $(RUN_DATE) --config $(CONFIG)
+
+monitor: ## Check feature drift vs the staging model's training data
+	$(PYTHON) -m stages.monitor --run-date $(RUN_DATE) --config $(CONFIG)
 
 serve: ## Serve the staging model (FastAPI at http://localhost:8000)
 	uvicorn serving.app:app --host 0.0.0.0 --port 8000
