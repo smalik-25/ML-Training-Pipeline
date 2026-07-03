@@ -11,41 +11,79 @@ on, because feature computation is an upstream (Spark) concern. Nullable
 features (rolling average, pre-drop search) are allowed and imputed with the
 saved training means, exactly as in training.
 
+Model lifecycle:
+  * The model is loaded at startup (a FastAPI lifespan handler). If that load
+    fails, the app stays up but reports unready via /health, so an orchestrator's
+    readiness probe holds traffic until a model is available.
+  * The registry alias is the source of truth for what's live. When you promote
+    a new version or roll back by moving the ``staging`` alias, call POST /reload
+    to pick it up without restarting the process.
+
 Run it:
     uvicorn serving.app:app --port 8000
-    # By default it loads the model at the MLflow `staging` alias. To pin a
-    # specific artifact instead, set MODEL_URI=/path/to/model.pt.
+    # Loads the model at the MLflow `staging` alias by default. To pin a specific
+    # artifact instead, set MODEL_URI=/path/to/model.pt.
 """
 
 from __future__ import annotations
 
+import logging
 import os
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
 from stages import inference
 
-app = FastAPI(
-    title="sneaker price-premium model",
-    description="Serves the model promoted to the MLflow 'staging' alias.",
-    version="1.0.0",
-)
+log = logging.getLogger("serving.app")
 
 _bundle: inference.ModelBundle | None = None
 
 
-def get_bundle() -> inference.ModelBundle:
-    """Load the model once and cache it. MODEL_URI overrides the registry."""
+def _load() -> inference.ModelBundle:
+    """Load from MODEL_URI if set, otherwise from the registry staging alias."""
+    model_uri = os.environ.get("MODEL_URI")
+    if model_uri:
+        return inference.load_bundle_from_uri(model_uri)
+    return inference.load_staging_bundle()
+
+
+def reload_bundle() -> inference.ModelBundle:
+    """(Re)load the model and replace the cache. Picks up a moved staging alias."""
     global _bundle
-    if _bundle is None:
-        model_uri = os.environ.get("MODEL_URI")
-        _bundle = (
-            inference.load_bundle_from_uri(model_uri)
-            if model_uri
-            else inference.load_staging_bundle()
-        )
+    _bundle = _load()
+    log.info(
+        "model loaded: version=%s run_id=%s", _bundle.model_version, _bundle.run_id
+    )
     return _bundle
+
+
+def get_bundle() -> inference.ModelBundle:
+    """Return the loaded model or 503 if none is loaded (not ready)."""
+    if _bundle is None:
+        raise HTTPException(status_code=503, detail="model not loaded")
+    return _bundle
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Load at startup so a broken/unavailable model shows up as an unready
+    # readiness check, not a 500 on the first user request. Stay up on failure
+    # so /reload can recover without a restart.
+    try:
+        reload_bundle()
+    except Exception:
+        log.exception("startup model load failed; unready until /reload succeeds")
+    yield
+
+
+app = FastAPI(
+    title="sneaker price-premium model",
+    description="Serves the model promoted to the MLflow 'staging' alias.",
+    version="1.0.0",
+    lifespan=lifespan,
+)
 
 
 class SaleFeatures(BaseModel):
@@ -72,6 +110,12 @@ class BatchPrediction(BaseModel):
     model_version: str | None = None
 
 
+class ReloadResult(BaseModel):
+    status: str
+    model_version: str | None = None
+    run_id: str | None = None
+
+
 @app.get("/")
 def root() -> dict:
     return {"service": "sneaker price-premium model", "docs": "/docs"}
@@ -79,11 +123,8 @@ def root() -> dict:
 
 @app.get("/health")
 def health() -> dict:
-    """Report whether a model is loaded and which version it is."""
-    try:
-        bundle = get_bundle()
-    except Exception as exc:  # surface load failures without crashing the app
-        raise HTTPException(status_code=503, detail=f"model not available: {exc}") from exc
+    """Readiness: 200 with the loaded version, or 503 if no model is loaded."""
+    bundle = get_bundle()
     return {
         "status": "ok",
         "model_name": inference.MODEL_NAME,
@@ -92,6 +133,20 @@ def health() -> dict:
         "run_date": bundle.run_date,
         "feature_columns": bundle.feature_columns,
     }
+
+
+@app.post("/reload", response_model=ReloadResult)
+def reload() -> ReloadResult:
+    """Reload the model from the registry (or MODEL_URI). Use after promotion."""
+    try:
+        bundle = reload_bundle()
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"reload failed: {exc}") from exc
+    return ReloadResult(
+        status="reloaded",
+        model_version=bundle.model_version,
+        run_id=bundle.run_id,
+    )
 
 
 @app.post("/predict", response_model=Prediction)

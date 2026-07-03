@@ -85,8 +85,12 @@ make serve          # FastAPI at http://localhost:8000, docs at /docs
 MODEL_URI=data/models/2026-06-28/<run_id>/model.pt make serve
 ```
 
-`GET /health` reports the loaded model version; `POST /predict` scores one sale's
-engineered features; `POST /predict/batch` scores a list.
+`GET /health` reports the loaded model version (503 until a model is loaded);
+`POST /predict` scores one sale's engineered features; `POST /predict/batch`
+scores a list. The model loads at startup, so a broken or missing model shows up
+as a failed readiness check rather than a 500 on the first request. After you
+promote a new version or roll back by moving the `staging` alias, `POST /reload`
+picks it up without a restart.
 
 ## Running the full DAG
 

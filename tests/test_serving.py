@@ -1,7 +1,9 @@
 """Tests for the FastAPI serving app.
 
 Points the app at a specific model.pt via MODEL_URI (bypassing the registry) and
-exercises /health and /predict with the TestClient. Guarded on torch + fastapi.
+exercises the lifecycle: startup load (via the TestClient context manager, which
+runs the lifespan), /health readiness, /predict, and /reload. Guarded on
+torch + fastapi.
 """
 
 from __future__ import annotations
@@ -36,33 +38,34 @@ def _write_model_pt(tmp_path):
     return str(path)
 
 
-def _client(tmp_path, monkeypatch):
-    from fastapi.testclient import TestClient
-
+def _prepared_app(tmp_path, monkeypatch):
+    monkeypatch.setenv("MODEL_URI", _write_model_pt(tmp_path))
     from serving import app as appmod
 
-    monkeypatch.setenv("MODEL_URI", _write_model_pt(tmp_path))
     appmod._bundle = None  # reset the module cache between tests
-    return TestClient(appmod.app)
+    return appmod
 
 
 def test_health_reports_loaded_model(tmp_path, monkeypatch) -> None:
     pytest.importorskip("torch")
     pytest.importorskip("fastapi")
-    client = _client(tmp_path, monkeypatch)
+    from fastapi.testclient import TestClient
 
-    resp = client.get("/health")
-    assert resp.status_code == 200
-    body = resp.json()
-    assert body["status"] == "ok"
-    assert body["feature_columns"]
+    appmod = _prepared_app(tmp_path, monkeypatch)
+    with TestClient(appmod.app) as client:  # context manager runs the lifespan
+        resp = client.get("/health")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["status"] == "ok"
+        assert body["feature_columns"]
 
 
 def test_predict_single_and_batch(tmp_path, monkeypatch) -> None:
     pytest.importorskip("torch")
     pytest.importorskip("fastapi")
-    client = _client(tmp_path, monkeypatch)
+    from fastapi.testclient import TestClient
 
+    appmod = _prepared_app(tmp_path, monkeypatch)
     one = {
         "days_since_release": 100.0,
         "size_us": 9.0,
@@ -72,10 +75,44 @@ def test_predict_single_and_batch(tmp_path, monkeypatch) -> None:
         "brand_avg_premium": 0.5,
         # nullable features omitted -> imputed with the saved training means
     }
-    resp = client.post("/predict", json=one)
-    assert resp.status_code == 200
-    assert "predicted_premium" in resp.json()
+    with TestClient(appmod.app) as client:
+        resp = client.post("/predict", json=one)
+        assert resp.status_code == 200
+        assert "predicted_premium" in resp.json()
 
-    resp = client.post("/predict/batch", json=[one, {**one, "size_us": 11.0}])
-    assert resp.status_code == 200
-    assert len(resp.json()["predictions"]) == 2
+        resp = client.post("/predict/batch", json=[one, {**one, "size_us": 11.0}])
+        assert resp.status_code == 200
+        assert len(resp.json()["predictions"]) == 2
+
+
+def test_reload_returns_version(tmp_path, monkeypatch) -> None:
+    pytest.importorskip("torch")
+    pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+
+    appmod = _prepared_app(tmp_path, monkeypatch)
+    with TestClient(appmod.app) as client:
+        resp = client.post("/reload")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["status"] == "reloaded"
+
+
+def test_unready_returns_503_when_no_model(tmp_path, monkeypatch) -> None:
+    pytest.importorskip("fastapi")
+    pytest.importorskip("mlflow")
+    from fastapi.testclient import TestClient
+
+    # No MODEL_URI and an empty registry -> startup load fails -> not ready.
+    monkeypatch.delenv("MODEL_URI", raising=False)
+    monkeypatch.setenv("MLFLOW_TRACKING_URI", f"sqlite:///{tmp_path}/empty.db")
+    monkeypatch.chdir(tmp_path)
+    from serving import app as appmod
+
+    appmod._bundle = None
+    with TestClient(appmod.app) as client:
+        assert client.get("/health").status_code == 503
+        assert client.post("/predict", json={
+            "days_since_release": 1.0, "size_us": 9.0, "retail_price": 180.0,
+            "size_premium": 0.0, "release_type_encoded": 0, "brand_avg_premium": 0.0,
+        }).status_code == 503

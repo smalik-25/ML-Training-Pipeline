@@ -4,6 +4,29 @@ Notes on what I built and why, newest entries first.
 
 ---
 
+## Serving correctness: startup load and alias reload
+
+Two fixes to the serving app before it could honestly be called deployable, both
+found by thinking through what happens in production rather than in a demo.
+
+- **The bundle was cached forever.** The app loaded the model once and never
+  invalidated it, so moving the `staging` alias (a promotion or a rollback)
+  wouldn't take effect until the process restarted. That quietly breaks the
+  alias-as-source-of-truth story. I added a `POST /reload` endpoint that reloads
+  from the registry, so an alias move is picked up without a restart.
+- **The model loaded lazily on the first request.** A broken or missing model
+  would surface as a 500 to whoever hit the endpoint first. I moved the load into
+  a FastAPI lifespan handler so it happens at startup; if it fails, the app stays
+  up but `/health` returns 503, which is what a readiness probe should see. Bad
+  model means "hold traffic," not "serve an error." Added a test for the unready
+  path (it runs without torch, since the failure happens before the model is
+  even deserialized).
+
+Neither is exotic, but both are the difference between "works in a demo" and
+"survives a promotion in production."
+
+---
+
 ## Closing the loop: batch scoring and online serving
 
 **What I built**
