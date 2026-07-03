@@ -9,6 +9,7 @@ config change -- the stage code is identical either way.
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
@@ -127,8 +128,12 @@ def load_config(config_path: str, run_date: str | None = None) -> PipelineConfig
 
     resolved_run_date = run_date or raw.get("run_date") or date.today().isoformat()
 
+    # STORAGE_ROOT env overrides the config, so switching the whole pipeline to
+    # S3 (or back) is one env var, no file edit. This is the prod switch.
+    storage_root = os.environ.get("STORAGE_ROOT") or raw["storage_root"]
+
     return PipelineConfig(
-        storage_root=raw["storage_root"],
+        storage_root=storage_root,
         raw_prefix=raw["raw_prefix"],
         features_prefix=raw["features_prefix"],
         validated_prefix=raw["validated_prefix"],

@@ -46,9 +46,38 @@ def _resolve(uri: str) -> tuple[pafs.FileSystem, str]:
         # plain absolute paths.
         local_path = parsed.path if parsed.scheme == "file" else uri
         return pafs.LocalFileSystem(), _abspath(local_path)
-    # Scheme-bearing URI (s3://, gs://, ...). Let pyarrow pick the backend.
+    if parsed.scheme == "s3":
+        return _s3_filesystem(), f"{parsed.netloc}{parsed.path}"
+    # Any other scheme (gs://, ...). Let pyarrow pick the backend.
     fs, path = pafs.FileSystem.from_uri(uri)
     return fs, path
+
+
+def _s3_filesystem() -> pafs.FileSystem:
+    """S3 filesystem, honoring an optional endpoint override.
+
+    Against real AWS this is just ``pafs.S3FileSystem()`` with the standard
+    credential chain (env vars, instance/task role, etc.). If
+    ``AWS_ENDPOINT_URL_S3`` (or ``AWS_ENDPOINT_URL``) is set, point pyarrow at
+    that endpoint instead, which is how you run the same code against MinIO,
+    LocalStack, or a moto server for a zero-cost S3 pre-check.
+    """
+    import os
+
+    endpoint = os.environ.get("AWS_ENDPOINT_URL_S3") or os.environ.get(
+        "AWS_ENDPOINT_URL"
+    )
+    if not endpoint:
+        return pafs.S3FileSystem()
+
+    parsed = urlparse(endpoint)
+    return pafs.S3FileSystem(
+        endpoint_override=parsed.netloc or endpoint,
+        scheme=parsed.scheme or "https",
+        region=os.environ.get("AWS_DEFAULT_REGION", "us-east-1"),
+        allow_bucket_creation=True,
+        allow_bucket_deletion=True,
+    )
 
 
 def _abspath(path: str) -> str:

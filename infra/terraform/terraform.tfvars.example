@@ -1,0 +1,12 @@
+# Copy to terraform.tfvars and edit. terraform.tfvars is gitignored.
+
+aws_region  = "us-east-1"
+project     = "sneaker-ml"
+
+# Must be globally unique across all of AWS.
+bucket_name = "sneaker-ml-lake-CHANGE-ME"
+
+# --- set these only for the second apply (after pushing the image + a model) ---
+# deploy_service = true
+# image_tag      = "latest"
+# model_uri      = "s3://sneaker-ml-lake-CHANGE-ME/models/2026-06-28/<run_id>/model.pt"

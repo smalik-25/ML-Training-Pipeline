@@ -1,0 +1,56 @@
+name: deploy-serving
+
+# Builds the serving image and pushes it to ECR. App Runner is configured with
+# auto_deployments_enabled, so a push to the tracked tag triggers a redeploy.
+#
+# Runs on a version tag (v*) or manual dispatch. This is separate from ci.yml
+# (which never touches AWS) so credentials are only in scope for a deploy.
+#
+# Required repo config:
+#   secrets: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
+#   vars:    AWS_REGION (e.g. us-east-1), ECR_REPOSITORY (e.g. sneaker-ml-serving)
+# Hardening: prefer GitHub OIDC (aws-actions/configure-aws-credentials with
+# role-to-assume) over long-lived access keys once you have an OIDC role.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Image tag to push (defaults to 'latest')."
+        required: false
+        default: "latest"
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Log in to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Resolve image tag
+        id: tag
+        run: echo "value=${{ github.event.inputs.tag || (startsWith(github.ref, 'refs/tags/') && github.ref_name) || 'latest' }}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push serving image
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+          REPOSITORY: ${{ vars.ECR_REPOSITORY }}
+          TAG: ${{ steps.tag.outputs.value }}
+        run: |
+          IMAGE="$REGISTRY/$REPOSITORY"
+          docker build -f serving/Dockerfile -t "$IMAGE:$TAG" -t "$IMAGE:${{ github.sha }}" .
+          docker push "$IMAGE:$TAG"
+          docker push "$IMAGE:${{ github.sha }}"
+          echo "Pushed $IMAGE:$TAG (App Runner auto-deploys on the tracked tag)."

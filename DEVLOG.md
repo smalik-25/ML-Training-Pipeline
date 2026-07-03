@@ -4,6 +4,60 @@ Notes on what I built and why, newest entries first.
 
 ---
 
+## AWS deployment: App Runner, ECR, S3, and proving the storage claim
+
+**What I built**
+
+The infrastructure to run this on AWS: Terraform under `infra/terraform/` for an
+S3 data-lake bucket, an ECR repo, least-privilege IAM, and an App Runner service
+that serves the model over HTTPS. A dedicated serving image
+(`serving/Dockerfile`, CPU-only torch), a `deploy-serving` GitHub Actions
+workflow that builds and pushes to ECR, and a `DEPLOY.md` runbook. I write the
+IaC; applying it is a handful of documented commands against my own account
+(Terraform state and real infra can't be driven from the build sandbox).
+
+**Proving the storage abstraction, for free.** The whole project rests on the
+claim that `stages/io.py` runs identically against local disk and S3, but until
+now it had only ever touched local disk. Rather than take that on faith (or pay
+to find out), I added `tests/test_io_s3.py`: it stands up an in-process moto S3
+server and round-trips Parquet, partitioned Parquet, bytes, and JSON through the
+*same* I/O code over `s3://`. It runs in the light CI job. To make that work I
+taught `_resolve` to honor `AWS_ENDPOINT_URL_S3`, which is also what lets you
+point the pipeline at MinIO or LocalStack. Against real AWS it's just the default
+credential chain.
+
+**Design decisions**
+
+- **App Runner, not ECS/Fargate, for v1.** App Runner takes an image and runs it
+  with HTTPS and autoscaling and almost no networking to wire up. Less Terraform,
+  same real deployment. Fargate would be more moving parts to show off but more
+  to get wrong.
+- **Serve from S3 via `MODEL_URI`, no hosted MLflow yet.** The serving app can
+  load the model straight from an `s3://.../model.pt` path, so v1 doesn't need a
+  running MLflow server (which would mean RDS plus another service plus more
+  cost). The instance role has `s3:GetObject` on `models/*` only, so no keys live
+  in the image. The registry-server variant is a documented follow-on.
+- **`STORAGE_ROOT` is a real env override now.** `load_config` reads it, so
+  flipping the entire pipeline to the S3 bucket is one variable, no file edit.
+  This is the payoff of the I/O seam I built in Phase 0, finally exercised
+  against actual S3.
+- **A phased apply.** App Runner needs the image and a model to exist before it
+  can start healthy, so the Terraform gates the service behind
+  `deploy_service = false` on the first apply (bucket + ECR + IAM), then true
+  once the image is pushed and a model uploaded. The runbook spells out the
+  order.
+- **Cost honesty.** App Runner keeps an instance warm, so it isn't free while it
+  exists. The runbook leads with the cost range and a teardown section, including
+  emptying the versioned bucket before destroy.
+
+**Next up**
+
+Genuinely optional from here: a hosted MLflow server on AWS for registry-driven
+rollback, GitHub OIDC instead of access keys for the deploy workflow, and a
+`/metrics` endpoint plus prediction logging for real observability.
+
+---
+
 ## Monitoring and retrain-on-drift
 
 **What I built**

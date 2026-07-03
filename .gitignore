@@ -43,6 +43,13 @@ airflow.cfg
 logs/
 standalone_admin_password.txt
 
+# Terraform (never commit state or real tfvars; the lock file IS committed)
+infra/terraform/.terraform/
+infra/terraform/*.tfstate
+infra/terraform/*.tfstate.*
+infra/terraform/*.tfvars
+crash.log
+
 # OS / editor
 .DS_Store
 .idea/

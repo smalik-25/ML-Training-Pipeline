@@ -58,6 +58,9 @@ airflow = [
 dev = [
     "pytest>=8.0",
     "ruff>=0.4",
+    # moto runs an in-process S3 server so tests can exercise the s3:// I/O path
+    # (pulls boto3, used to seed the bucket).
+    "moto[s3]>=5",
 ]
 
 [tool.setuptools]

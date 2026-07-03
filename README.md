@@ -92,6 +92,17 @@ as a failed readiness check rather than a 500 on the first request. After you
 promote a new version or roll back by moving the `staging` alias, `POST /reload`
 picks it up without a restart.
 
+## Deploying to AWS
+
+There's a full runbook in [`DEPLOY.md`](./DEPLOY.md): Terraform under
+`infra/terraform/` provisions an S3 data-lake bucket, an ECR repo, and an App
+Runner service that serves the model from S3 with least-privilege IAM. The
+serving image is `serving/Dockerfile` (CPU-only torch), and
+`.github/workflows/deploy-serving.yml` builds and pushes it. Switching the whole
+pipeline between local and S3 is one env var, `STORAGE_ROOT=s3://<bucket>`, and
+that `s3://` path is exercised in CI against a moto S3 server so it's not an
+untested claim.
+
 ## Running the full DAG
 
 ```bash
