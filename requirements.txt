@@ -41,4 +41,4 @@ apache-airflow-providers-amazon>=8.0
 # --- dev ---
 pytest>=8.0
 ruff>=0.4
-moto[s3]>=5
+moto[s3,server]>=5
