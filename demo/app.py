@@ -17,6 +17,7 @@ from net import FEATURE_COLUMNS, load_bundle, predict
 
 MODEL_PATH = str(Path(__file__).parent / "model.pt")
 REPO_URL = "https://github.com/smalik-25/ML-Training-Pipeline"
+SNEAKER_INTEL_URL = "https://github.com/smalik-25/sneaker-intel"
 
 # Real numbers from the 99,956-row StockX run (see the repo DEVLOG).
 RUN = {
@@ -78,6 +79,10 @@ CSS = """
 }
 
 .stApp, [data-testid="stAppViewContainer"] { background: var(--void); }
+/* hauntological grain: restrained fractal noise, screen-blended */
+.stApp::before { content:""; position:fixed; inset:0; z-index:9999;
+  pointer-events:none; opacity:.035; mix-blend-mode:screen;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); }
 #MainMenu, header, footer, [data-testid="stToolbar"], [data-testid="stDecoration"],
 [data-testid="stStatusWidget"] { display:none !important; }
 .block-container { max-width: 1080px; padding-top: 2.5rem; padding-bottom: 5rem; }
@@ -204,8 +209,8 @@ st.markdown(
     <div class="sm-status"><span class="dot"></span>pipeline sneaker.0.8 // green
       &nbsp;·&nbsp; {RUN['rows_scored']} real StockX sales</div>
     <p class="sm-lede">I build the plumbing that moves data quietly and correctly.
-    This is the ML layer I deferred in <a href="{REPO_URL}">sneaker-intel</a> and came
-    back to build: ingest, feature engineering, a loud data contract, distributed
+    This is the ML layer I deferred in <a href="{SNEAKER_INTEL_URL}">sneaker-intel</a> and
+    came back to build: ingest, feature engineering, a loud data contract, distributed
     training, a model registry, batch and online serving, and drift monitoring. The
     model is simple on purpose. The pipeline is the point.</p>
     """,
@@ -282,7 +287,7 @@ if st.button("PREDICT →", type="primary"):
 # --------------------------------------------------------------------------- #
 rule("§ 0.2 — MODEL")
 st.markdown(
-    '<div class="sm-grid">'
+    '<div class="sm-grid" style="grid-template-columns:repeat(3,1fr)">'
     + field(":01", "registry", f"{RUN['model_name']} @staging v{RUN['model_version']}")
     + field(":02", "val rmse", f"{RUN['val_rmse']:.3f}", "0–20 scale")
     + field(":03", "temporal split", f"{RUN['n_train']} / {RUN['n_val']}",
@@ -325,7 +330,7 @@ st.markdown(
 # --------------------------------------------------------------------------- #
 rule("§ 0.4 — OBSERVED")
 st.markdown(
-    '<div class="sm-grid">'
+    '<div class="sm-grid" style="grid-template-columns:repeat(4,1fr)">'
     + field(":01", "rows scored", RUN["rows_scored"], "real sales")
     + field(":02", "scoring rmse", f"{RUN['scoring_rmse']:.3f}", "full set")
     + field(":03", "row retention", RUN["retention"], "validated")
