@@ -13,6 +13,12 @@ that I deferred there on purpose. sneaker-intel built the data engineering
 foundation: a hand-written Postgres star schema over ~99K StockX sales with a
 full dbt transformation layer. This repo builds the ML layer on top of it.
 
+## Live demo
+
+- **This project · interactive dashboard:** https://huggingface.co/spaces/smalik25/sneaker-ml-platform
+- **sneaker-intel (Phase 1) · dashboard:** https://sneaker-intel-2.streamlit.app/
+- **Portfolio:** https://sam-malik.com
+
 ## Architecture
 
 ```mermaid
@@ -156,6 +162,10 @@ one, and I fixed each as a documented config change. The full story is in
 - [x] **Phase 6**: Airflow DAG orchestration
 - [x] **Phase 7**: Docker, CI/CD, and docs polish
 - [x] **Real-data integration**: runs end-to-end on the live sneaker-intel warehouse (99,956 StockX sales)
+- [x] **Closing the loop**: batch scoring stage + FastAPI serving through one inference path (no train/serve skew)
+- [x] **Drift monitoring**: PSI drift stage + a scheduled retrain-on-drift DAG
+- [x] **AWS deployment**: Terraform (S3 · ECR · App Runner) + serving image + deploy workflow (see [`DEPLOY.md`](./DEPLOY.md))
+- [x] **Live demo**: Streamlit dashboard on Hugging Face Spaces
 
 ## Design decisions
 
