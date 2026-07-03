@@ -70,6 +70,8 @@ packages = ["stages", "models", "dags", "serving"]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+# The demo/ Streamlit Space is a standalone deliverable with long inline CSS.
+extend-exclude = ["demo"]
 
 [tool.ruff.lint]
 # Conservative, interview-legible rule set: pyflakes, pycodestyle, isort,
