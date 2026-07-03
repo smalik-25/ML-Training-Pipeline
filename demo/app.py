@@ -17,7 +17,8 @@ from net import FEATURE_COLUMNS, load_bundle, predict
 
 MODEL_PATH = str(Path(__file__).parent / "model.pt")
 REPO_URL = "https://github.com/smalik-25/ML-Training-Pipeline"
-SNEAKER_INTEL_URL = "https://github.com/smalik-25/sneaker-intel"
+SNEAKER_INTEL_URL = "https://sneaker-intel-2.streamlit.app/"
+WEBSITE_URL = "https://sam-malik.com"
 
 # Real numbers from the 99,956-row StockX run (see the repo DEVLOG).
 RUN = {
@@ -354,7 +355,9 @@ st.markdown('<div class="sm-rule"><span class="line"></span></div>',
             unsafe_allow_html=True)
 st.markdown(
     f'<div class="sm-foot">↳ <a href="{REPO_URL}">github.com/smalik-25/'
-    'ML-Training-Pipeline</a><br><br>SAM·MALIK · Data Engineer · Theory-Fiction · '
-    'Seattle · 47.6°N<br>Built in the ruins of the present.</div>',
+    'ML-Training-Pipeline</a><br>'
+    f'↳ <a href="{WEBSITE_URL}">sam-malik.com</a><br><br>'
+    'SAM·MALIK · Data Engineer · Theory-Fiction · Seattle · 47.6°N<br>'
+    'Built in the ruins of the present.</div>',
     unsafe_allow_html=True,
 )
