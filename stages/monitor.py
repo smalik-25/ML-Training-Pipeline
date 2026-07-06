@@ -116,14 +116,28 @@ def run(
     config: PipelineConfig,
     reference_run_date: str | None = None,
     psi_threshold: float = DEFAULT_PSI_THRESHOLD,
+    feature_columns: list[str] | None = None,
+    excluded_reasons: dict[str, str] | None = None,
 ) -> tuple[str, bool]:
     """Compute drift for the run_date's features. Returns (report_uri, drifted).
 
     If no reference is given and there is no staging model, reports drift = True
     (there's no baseline, so the first model should be trained).
+
+    ``feature_columns`` restricts the PSI check to a subset. A current-only source
+    (the KicksDB drift path) can't honestly compute every feature, so it passes
+    the subset it can and the rest are recorded as excluded rather than PSI'd on
+    degenerate data. Defaults to all of ``FEATURE_COLUMNS``.
+
+    ``excluded_reasons`` maps an excluded feature to why it can't be measured from
+    this source; the report carries those reasons so the coverage gap is explained,
+    not just counted. Features without a listed reason get a generic one.
     """
     if reference_run_date is None:
         reference_run_date = _staging_reference_run_date()
+
+    columns = list(feature_columns) if feature_columns else list(FEATURE_COLUMNS)
+    excluded = [c for c in FEATURE_COLUMNS if c not in columns]
 
     current = read_parquet(config.validated_uri())
 
@@ -139,7 +153,22 @@ def run(
     else:
         reference_config = replace(config, run_date=reference_run_date)
         reference = read_parquet(reference_config.validated_uri())
-        report = drift_report(reference, current, psi_threshold=psi_threshold)
+        report = drift_report(
+            reference, current, feature_columns=columns, psi_threshold=psi_threshold
+        )
+        if excluded:
+            reasons = excluded_reasons or {}
+            report["excluded_features"] = {
+                c: reasons.get(c, "not computable from this source")
+                for c in excluded
+            }
+            logger.info(
+                "drift excludes %d feature(s) not computable from this source: %s",
+                len(excluded),
+                ", ".join(
+                    f"{c} ({report['excluded_features'][c]})" for c in excluded
+                ),
+            )
         report.update(
             run_date=config.run_date,
             reference_run_date=reference_run_date,
@@ -147,7 +176,7 @@ def run(
         )
         logger.info(
             "drift: %d/%d features over PSI %.2f (drifted=%s) vs reference %s",
-            report["n_drifted_features"], len(FEATURE_COLUMNS), psi_threshold,
+            report["n_drifted_features"], len(columns), psi_threshold,
             report["drifted"], reference_run_date,
         )
 

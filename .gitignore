@@ -1,6 +1,12 @@
 # Secrets -- never commit
 .env
 
+# Working notes and planning docs -- scaffolding, kept out of the public repo
+CLAUDE.md
+KICKSDB_INTEGRATION_PLAN.md
+KICKSDB_PROGRESS.md
+ML_PIPELINE_PROJECT_PLAN.md
+
 # Python
 __pycache__/
 *.py[cod]
@@ -25,6 +31,7 @@ data/validated/
 data/models/
 data/failures/
 data/predictions/
+data/drift/
 *.parquet
 *.pt
 mlruns/

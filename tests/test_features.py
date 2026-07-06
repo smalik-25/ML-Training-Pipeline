@@ -85,6 +85,39 @@ def test_output_schema_matches_contract(spark, raw, fcfg) -> None:
     assert feats.columns == OUTPUT_COLUMNS
 
 
+def test_kicksdb_source_flows_through_to_validation(
+    spark, fcfg, tmp_path, monkeypatch
+) -> None:
+    """A KicksDB-sourced landing computes features and passes the contract with
+    no change to the feature stage or the Pandera schema. This is the whole
+    integration bet: a second, differently-shaped source absorbed at ingest,
+    with everything downstream untouched.
+    """
+    monkeypatch.delenv("KICKSDB_API_KEY", raising=False)
+    from stages import ingest
+    from stages.validate import validate_features
+
+    config = PipelineConfig(
+        storage_root=str(tmp_path), raw_prefix="raw", features_prefix="features",
+        validated_prefix="validated", models_prefix="models",
+        failures_prefix="failures", run_date="2026-07-04",
+    )
+    ingest.run(config, source="kicksdb")  # fixture mode: canned KicksDB responses
+
+    raw = str(tmp_path / "raw" / "2026-07-04")
+    rd = lambda name: spark.read.parquet(f"{raw}/{name}.parquet")  # noqa: E731
+    feats = compute_features(
+        rd("sales"), rd("shoes"), rd("drops"), rd("search_interest"), fcfg
+    )
+    assert feats.columns == OUTPUT_COLUMNS
+
+    # Raises FeatureValidationError if the KicksDB mismatch leaked past ingest.
+    validated, _ = validate_features(feats.toPandas(), fcfg)
+    assert len(validated) > 0
+    premium = validated["price_premium"]
+    assert premium.between(fcfg.price_premium_min, fcfg.price_premium_max).all()
+
+
 def test_run_writes_partitioned_by_brand(spark, raw, fcfg) -> None:
     import os
     import shutil

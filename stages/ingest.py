@@ -1,15 +1,18 @@
 """Stage 1 -- Ingest: land the four source tables into the raw Parquet zone.
 
-Two source modes, one output contract. Either way the stage writes
-``sales.parquet``, ``shoes.parquet``, ``drops.parquet`` and
-``search_interest.parquet`` under ``raw/{run_date}/`` and logs row counts,
-schema, and the URIs written (which Airflow pushes to XCom).
+Three source modes, one output contract. Any of them writes ``sales.parquet``,
+``shoes.parquet``, ``drops.parquet`` and ``search_interest.parquet`` under
+``raw/{run_date}/`` and logs row counts, schema, and the URIs written (which
+Airflow pushes to XCom).
 
-  * Real export -- if ``SNEAKER_INTEL_DSN`` is set, read from the live
+  * Real Postgres export -- if ``SNEAKER_INTEL_DSN`` is set, read from the live
     sneaker-intel Postgres warehouse.
-  * Fixture mode (default for dev/CI) -- if the DSN is unset, land the synthetic
-    fixtures from ``data/fixtures/`` instead. The pipeline runs end-to-end with
-    no database; the warehouse is one env var away.
+  * KicksDB export -- with ``source="kicksdb"``, pull the live kicks.dev market
+    API (StockX + GOAT), gated behind ``KICKSDB_API_KEY``. No key falls back to
+    canned KicksDB responses. The reshape lives in ``stages/kicksdb.py``.
+  * Fixture mode (default for dev/CI) -- otherwise land the synthetic fixtures
+    from ``data/fixtures/``. The pipeline runs end-to-end with no database and no
+    API; both real sources are one env var away.
 
 Anti-corruption layer. The real sneaker-intel star schema does not match our
 canonical raw schema 1:1 -- it uses ``shoe_key``/``sold_price``/``sold_date``/
@@ -19,6 +22,8 @@ The SQL in ``TABLE_QUERIES`` is the mapping seam: it aliases columns, casts
 numerics to float, and rolls each shoe's canonical (earliest) drop up onto the
 shoe row, so every downstream stage stays oblivious to the source schema. This
 is the one place that knows what the warehouse actually looks like.
+``stages/kicksdb.py`` is the same seam for the KicksDB API -- a second source
+with a completely different shape, absorbed into the identical canonical layout.
 
 The dbt mart tables (mart_shoe_performance, mart_price_trajectory) are
 deliberately NOT exported -- the Phase 2 Spark stage re-derives and extends
@@ -155,25 +160,63 @@ def _read_from_fixtures(fixtures_dir: str, table: str) -> pd.DataFrame:
     return read_parquet(path_join(fixtures_dir, f"{table}.parquet"))
 
 
+def _read_all_from_kicksdb(
+    run_date: str,
+    api_key: str | None,
+    reference_path: str | None,
+    fixtures_dir: str | None,
+) -> dict[str, pd.DataFrame]:
+    """Reshape KicksDB (live if a key is present, else canned) into the frames.
+
+    The adapter lives in its own module; imported lazily so fixture/Postgres runs
+    and CI never depend on it. The live client's ``requests`` dependency is only
+    imported inside the client, so this mode still works from fixtures with the
+    core install alone.
+    """
+    from stages import kicksdb
+
+    kwargs: dict[str, str] = {}
+    if reference_path:
+        kwargs["reference_path"] = reference_path
+    if fixtures_dir:
+        kwargs["fixtures_dir"] = fixtures_dir
+    return kicksdb.read_all(run_date, api_key=api_key, **kwargs)
+
+
 def run(
     config: PipelineConfig,
     dsn: str | None = None,
     fixtures_dir: str = "data/fixtures",
+    source: str = "auto",
+    kicksdb_reference_path: str | None = None,
+    kicksdb_fixtures_dir: str | None = None,
 ) -> dict[str, str]:
     """Land all four raw tables. Returns ``{table: written_uri}`` for XCom.
 
     Args:
         config: resolved pipeline config (provides raw_uri + run_date).
-        dsn: Postgres connection string; if falsy, fixture mode is used.
+        dsn: Postgres connection string; if falsy (and source is "auto"),
+            fixture mode is used.
         fixtures_dir: where fixture Parquet lives when in fixture mode.
+        source: "auto" (Postgres if ``dsn`` else fixtures) or "kicksdb" (the
+            kicks.dev adapter, live if ``KICKSDB_API_KEY`` is set else canned
+            KicksDB fixtures). "auto" preserves the original two-mode behavior.
+        kicksdb_reference_path: override for the SKU->retail reference JSON.
+        kicksdb_fixtures_dir: override for the canned KicksDB responses dir.
     """
-    source = "postgres" if dsn else "fixtures"
-    logger.info("ingest source=%s run_date=%s", source, config.run_date)
-
-    if dsn:
+    if source == "kicksdb":
+        api_key = os.environ.get("KICKSDB_API_KEY") or None
+        source_label = "kicksdb-live" if api_key else "kicksdb-fixtures"
+        frames = _read_all_from_kicksdb(
+            config.run_date, api_key, kicksdb_reference_path, kicksdb_fixtures_dir
+        )
+    elif dsn:
+        source_label = "postgres"
         frames = _read_all_from_postgres(dsn)
     else:
+        source_label = "fixtures"
         frames = {t: _read_from_fixtures(fixtures_dir, t) for t in LOGICAL_TABLES}
+    logger.info("ingest source=%s run_date=%s", source_label, config.run_date)
 
     written: dict[str, str] = {}
     for table in LOGICAL_TABLES:
@@ -181,7 +224,7 @@ def run(
         if df.empty:
             raise ValueError(
                 f"Source table '{table}' produced 0 rows -- refusing to land an "
-                f"empty raw partition (source={source})."
+                f"empty raw partition (source={source_label})."
             )
 
         uri = config.raw_uri(table)
@@ -203,12 +246,39 @@ def main() -> None:
         default="data/fixtures",
         help="Fixture directory used when SNEAKER_INTEL_DSN is unset.",
     )
+    parser.add_argument(
+        "--source",
+        choices=["auto", "kicksdb"],
+        default="auto",
+        help=(
+            "auto: Postgres if SNEAKER_INTEL_DSN is set, else synthetic fixtures. "
+            "kicksdb: the kicks.dev adapter (live if KICKSDB_API_KEY is set, else "
+            "canned KicksDB fixtures)."
+        ),
+    )
+    parser.add_argument(
+        "--kicksdb-fixtures-dir",
+        default=None,
+        help="Override dir for canned KicksDB responses (source=kicksdb).",
+    )
+    parser.add_argument(
+        "--kicksdb-reference-path",
+        default=None,
+        help="Override the SKU->retail reference JSON (source=kicksdb).",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
     config = load_config(args.config, run_date=args.run_date)
     dsn = os.environ.get("SNEAKER_INTEL_DSN") or None
-    written = run(config, dsn=dsn, fixtures_dir=args.fixtures_dir)
+    written = run(
+        config,
+        dsn=dsn,
+        fixtures_dir=args.fixtures_dir,
+        source=args.source,
+        kicksdb_reference_path=args.kicksdb_reference_path,
+        kicksdb_fixtures_dir=args.kicksdb_fixtures_dir,
+    )
     logger.info("ingest complete: %d tables landed under run_date=%s",
                 len(written), config.run_date)
 

@@ -139,6 +139,22 @@ db-init && make load` in that repo), then in this repo run `pip install -e
 and run the stages with `--run-date <date>`. Pass `--split-year 2019` at train,
 since the StockX data is 2017–2019.
 
+### A second source: KicksDB
+
+There's a second real source behind the same ingest seam: the KicksDB
+([kicks.dev](https://kicks.dev)) market API. `stages/kicksdb.py` reshapes its
+StockX and GOAT responses into the identical canonical schema the Postgres path
+produces, so features, validation, training, and serving never learn it exists.
+Run it with `make ingest-kicksdb` (or `--source kicksdb`); with no
+`KICKSDB_API_KEY` it reads canned responses under `data/fixtures/kicksdb/`, so a
+clean clone still runs and CI never touches the network. The Starter tier doesn't
+expose a retail price, which the premium target needs, so retail is carried from a
+small SKU-keyed reference (`config/kicksdb_retail_reference.json`) rather than
+fabricated; a product with no resolvable retail is excluded and counted, not
+guessed. That same landing feeds the drift monitor against today's market
+(`dags/drift_monitor.py`) and lets the model score current sneakers through the
+one inference path (`make live-score`). The reasoning is in [`DEVLOG.md`](./DEVLOG.md).
+
 ## Results on real data
 
 I ran it end-to-end on the live warehouse: **99,956 StockX sales** (Off-White and
@@ -166,6 +182,10 @@ one, and I fixed each as a documented config change. The full story is in
 - [x] **Drift monitoring**: PSI drift stage + a scheduled retrain-on-drift DAG
 - [x] **AWS deployment**: Terraform (S3 · ECR · App Runner) + serving image + deploy workflow (see [`DEPLOY.md`](./DEPLOY.md))
 - [x] **Live demo**: Streamlit dashboard on Hugging Face Spaces
+- [x] **KicksDB · recon + retail decision**: probed the kicks.dev Starter API, confirmed it exposes no retail price, and chose a SKU-keyed retail reference over fabricating it
+- [x] **KicksDB · second ingest source**: a third ingest mode reshaping the kicks.dev API (StockX + GOAT) into the identical canonical schema, byte-compatible downstream, so nothing after ingest changed
+- [x] **KicksDB · drift fuel**: the drift DAG computes PSI against the live KicksDB market, on the features a current snapshot can compute, excluding the rest honestly
+- [x] **KicksDB · live inference**: the deployed model scores today's sneakers through the one inference path, out-of-distribution and labeled as such
 
 ## Design decisions
 
@@ -229,3 +249,12 @@ narrative; this is the short version.
   `@staging` model was trained on. It triggers the training pipeline only when a
   feature clears the drift threshold, and short-circuits otherwise. `make monitor`
   runs the check on its own.
+- **A second real source through the same seam (KicksDB).** `stages/kicksdb.py`
+  reshapes the kicks.dev API into the exact canonical schema, so a genuinely
+  different source (a REST API, current-snapshot grain, two endpoints) lands with
+  nothing downstream changed. The one thing it doesn't give is a retail price,
+  which the premium target needs, so I carry it from a SKU-keyed reference and
+  exclude what I can't resolve rather than fabricate it. That same landing feeds
+  the drift monitor against today's market and lets the model score current,
+  out-of-distribution sneakers, with the gap quantified rather than hidden. The
+  recon, the retail tradeoff, and the ToS check are written up in the DEVLOG.

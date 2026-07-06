@@ -1,0 +1,15 @@
+[
+  {"sku": "DD1391-100", "retail_price": 110.0, "release_type": "general", "brand": "Nike", "model": "Dunk Low", "colorway": "White/Black", "silhouette": "Dunk"},
+  {"sku": "DD1503-101", "retail_price": 100.0, "release_type": "general", "brand": "Nike", "model": "Dunk Low", "colorway": "White/Photon Dust", "silhouette": "Dunk"},
+  {"sku": "DN3707-100", "retail_price": 210.0, "release_type": "general", "brand": "Jordan", "model": "Air Jordan 3 Retro", "colorway": "White Cement Reimagined", "silhouette": "Air Jordan 3"},
+  {"sku": "555088-101", "retail_price": 160.0, "release_type": "limited", "brand": "Jordan", "model": "Air Jordan 1 High", "colorway": "Chicago", "silhouette": "Air Jordan 1"},
+  {"sku": "DZ5485-612", "retail_price": 180.0, "release_type": "limited", "brand": "Jordan", "model": "Air Jordan 1 High", "colorway": "Lost and Found", "silhouette": "Air Jordan 1"},
+  {"sku": "555088-134", "retail_price": 170.0, "release_type": "limited", "brand": "Jordan", "model": "Air Jordan 1 High", "colorway": "University Blue", "silhouette": "Air Jordan 1"},
+  {"sku": "308497-060", "retail_price": 200.0, "release_type": "limited", "brand": "Jordan", "model": "Air Jordan 4 Retro", "colorway": "Bred", "silhouette": "Air Jordan 4"},
+  {"sku": "AA3834-101", "retail_price": 190.0, "release_type": "collab", "brand": "Jordan", "model": "Air Jordan 1 High", "colorway": "Off-White Chicago", "silhouette": "Air Jordan 1"},
+  {"sku": "CQ4277-001", "retail_price": 150.0, "release_type": "collab", "brand": "Jordan", "model": "Air Jordan 1 Low", "colorway": "Travis Scott Mocha", "silhouette": "Air Jordan 1"},
+  {"sku": "CP9654", "retail_price": 220.0, "release_type": "limited", "brand": "Adidas", "model": "Yeezy Boost 350 V2", "colorway": "Zebra", "silhouette": "Yeezy 350"},
+  {"sku": "HQ6316", "retail_price": 230.0, "release_type": "limited", "brand": "Adidas", "model": "Yeezy Boost 350 V2", "colorway": "Bone", "silhouette": "Yeezy 350"},
+  {"sku": "B75806", "retail_price": 100.0, "release_type": "general", "brand": "Adidas", "model": "Samba OG", "colorway": "Black White", "silhouette": "Samba"},
+  {"sku": "BB550WT1", "retail_price": 110.0, "release_type": "general", "brand": "New Balance", "model": "550", "colorway": "White Green", "silhouette": "550"}
+]

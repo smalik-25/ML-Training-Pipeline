@@ -37,6 +37,7 @@ jobs:
         run: >
           pytest tests/test_io.py tests/test_io_s3.py tests/test_ingest.py
           tests/test_validate.py tests/test_inference.py tests/test_monitor.py
+          tests/test_kicksdb.py
 
   spark-tests:
     # Feature engineering stage -- needs PySpark + a JRE.
@@ -69,6 +70,7 @@ jobs:
         run: >
           pytest tests/test_train.py tests/test_register.py
           tests/test_inference.py tests/test_score.py tests/test_serving.py
+          tests/test_live_score.py
 
   dag-integrity:
     # DAG structure + a hard import check, with Airflow pinned via its

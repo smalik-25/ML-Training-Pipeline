@@ -58,6 +58,29 @@ PRESETS = {
     ),
 }
 
+# Current sneakers pulled from KicksDB (kicks.dev), scored through the same model.
+# Retail comes from a curated SKU reference (the Starter tier doesn't expose it);
+# the snapshot-uncomputable features (rolling, pre-drop search, brand average) are
+# left null and imputed with the training means. These are out of distribution vs
+# the 2017-2019 training slice, so the model runs hot -- shown as-is, not corrected.
+CURRENT_KICKSDB = [
+    {"name": "Nike Dunk Low", "note": "Panda", "retail": 110.0, "days": 1942, "rt": 0},
+    {"name": "Off-White × AJ1", "note": "Chicago", "retail": 190.0, "days": 3223, "rt": 1},
+    {"name": "Travis Scott × AJ1 Low", "note": "Mocha", "retail": 150.0, "days": 2542, "rt": 1},
+    {"name": "Yeezy 350 V2", "note": "Zebra", "retail": 220.0, "days": 1547, "rt": 2},
+]
+
+
+def _kicksdb_record(item: dict) -> dict:
+    """One current sneaker's feature row: real retail/release, the rest imputed."""
+    return {
+        "days_since_release": item["days"], "size_us": 9.0,
+        "retail_price": item["retail"], "size_premium": 0.0,
+        "release_type_encoded": item["rt"], "rolling_7d_avg_premium": None,
+        "search_index_7d_pre_drop": None, "brand_avg_premium": None,
+    }
+
+
 st.set_page_config(page_title="SAM·MALIK — sneaker ML", layout="wide")
 
 # --------------------------------------------------------------------------- #
@@ -305,7 +328,7 @@ st.markdown(
 # --------------------------------------------------------------------------- #
 rule("§ 0.3 — THE PIPELINE")
 stages = [
-    (":01", "ingest", "postgres → parquet"),
+    (":01", "ingest", "postgres · kicksdb"),
     (":02", "features", "pyspark"),
     (":03", "validate", "pandera"),
     (":04", "train", "ray + pytorch"),
@@ -345,6 +368,37 @@ st.markdown(
     f"caught {RUN['pre_release']} pre-release sales and premium outliers past the "
     "ceiling; each became a documented config decision rather than a silent patch. "
     "That is the validator doing its job on real data.</p>",
+    unsafe_allow_html=True,
+)
+
+# --------------------------------------------------------------------------- #
+# Current market (KicksDB)
+# --------------------------------------------------------------------------- #
+rule("§ 0.5 — CURRENT MARKET · KICKSDB")
+st.markdown(
+    '<p class="sm-lede" style="margin-top:.2rem">The model learned on 2017–2019 '
+    "Off-White and Yeezy StockX sales. These are current sneakers pulled from "
+    '<a href="https://kicks.dev">KicksDB</a> and scored through the exact same '
+    "inference path. They are out of distribution: the drift check above puts a "
+    "number on that gap, and the premiums here run hot because the model never saw "
+    "a 2024 market. Retail comes from a curated reference (the Starter tier returns "
+    "none), and the signals a snapshot can't give (rolling average, pre-drop search) "
+    "are imputed. Shown as-is, not quietly corrected.</p>",
+    unsafe_allow_html=True,
+)
+_kick_cards = ""
+for _item in CURRENT_KICKSDB:
+    _prem = float(predict(_bundle(), [_kicksdb_record(_item)])[0])
+    _kick_cards += (
+        f'<div class="sm-field"><div class="k">{_item["name"]} '
+        f'<span class="idx">· {_item["note"]}</span></div>'
+        f'<div class="v">{_prem * 100:+.0f}%<span class="u"> premium</span></div>'
+        f'<div class="k" style="margin-top:6px">${_item["retail"]:.0f} retail '
+        f'· ~${_item["retail"] * (1 + _prem):,.0f} resale</div></div>'
+    )
+st.markdown(
+    '<div class="sm-grid" style="grid-template-columns:repeat(4,1fr)">'
+    + _kick_cards + "</div>",
     unsafe_allow_html=True,
 )
 

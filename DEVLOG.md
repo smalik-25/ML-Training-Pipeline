@@ -4,6 +4,186 @@ Notes on what I built and why, newest entries first.
 
 ---
 
+## KicksDB as live inference: scoring today's sneakers through the one path
+
+**What I built**
+
+`stages/live_score.py`: pull a current KicksDB snapshot through the Phase 1
+adapter, build the engineered features a single snapshot can support, and score
+them with the `@staging` model through `stages.inference`, the exact same
+impute/standardize/forward the batch path uses. No second model transform. A spy
+test asserts `inference.build_matrix` is the one that actually runs, so a copy
+can't quietly drift from training preprocessing. The demo grows a "current market
+· KicksDB" section that scores four current sneakers and says out loud that
+they're out of distribution.
+
+**The features a snapshot can't give.** The model wants eight features; a
+current-only snapshot honestly supports about half. `size_premium` collapses to 0
+(one representative size), and `rolling_7d_avg_premium` and
+`search_index_7d_pre_drop` are null and get imputed with the training means,
+exactly as the model handles a missing signal anywhere else. I compute the
+features I can and let the model's priors fill the rest, rather than invent
+history to make the row look complete.
+
+**What it shows, honestly.** The predictions run hot. The model says a current
+Dunk "Panda" is +460% over retail when it actually trades near retail now. That's
+correct behaviour for a model trained on hyped 2017-2019 Off-White and Yeezy pairs
+and pointed at a 2024 market, and I didn't correct it. The Phase 2 drift numbers
+already quantify that gap; this is the same gap made concrete, one sneaker at a
+time. The retail decision from Phase 0 bites hardest here: a sneaker with no retail
+in the reference is reported uncomputable, never scored on a guessed number.
+
+**Next up**
+
+The demo scores a canned current set so a clean clone works with no key. Wiring the
+Space to a live KicksDB pull behind a Space secret is a small follow-on.
+
+---
+
+## KicksDB as drift fuel: has the market moved since 2019
+
+**What I built**
+
+The drift DAG (`dags/drift_monitor.py`) now lands the current KicksDB market
+snapshot as its "current" distribution instead of a synthetic stand-in, so PSI is
+measured against today's real prices. The reference stays what it always was, the
+distribution the `@staging` model was trained on, resolved from the registry.
+Drift still means "moved from what the live model learned", so I didn't touch that
+side. Same `ingest -> features -> validate -> detect_drift -> trigger_training`
+chain, same short-circuit: no drift, no retrain.
+
+**Only the features a snapshot can honestly compare.** A current-only snapshot
+can't compute four of the eight features. `size_us` and `size_premium` need size
+dispersion a single representative size doesn't have; `rolling_7d_avg_premium`
+needs per-sale history the Starter tier omits; `search_index_7d_pre_drop` needs a
+pre-drop demand signal a snapshot doesn't carry. Running PSI on those would measure
+the grain, not the market. So `stages/monitor.py` takes a feature subset, computes
+PSI on the four that are real (`days_since_release`, `retail_price`,
+`release_type_encoded`, `brand_avg_premium`), and records the excluded four in the
+report with a reason. Four honest numbers and a named gap beats eight numbers, half
+of them artifacts.
+
+**What it found.** Against the training distribution the live KicksDB snapshot
+drifts hard, `days_since_release` PSI around 12, `retail_price` around 1.8, which
+is exactly right: I'm comparing 2017-2019 sales of shoes days off their release to
+a 2026 snapshot of shoes years old. The market moved, the monitor says so, and the
+retrain gate trips.
+
+**Budget.** The adapter pulls two requests per reference SKU, so a daily schedule
+over ~13 SKUs is ~26 requests a run, roughly 780 a month, well under the
+50,000/month Starter cap. Noted so a scheduled pull doesn't quietly blow the plan.
+
+---
+
+## KicksDB as a second ingest source: the anti-corruption layer, tested
+
+**What I built**
+
+`stages/kicksdb.py`, a third ingest mode alongside the sneaker-intel Postgres path
+and the synthetic fixtures. It reshapes the kicks.dev API into the exact canonical
+`sales`/`shoes`/`drops`/`search_interest` layout the other two produce, so
+features, validate, train, and serve never learn it exists. Gated behind
+`KICKSDB_API_KEY`, mirroring how Postgres is gated behind `SNEAKER_INTEL_DSN`; no
+key falls back to canned responses under `data/fixtures/kicksdb/` and logs fixture
+mode, so a clean clone and CI run with no secret. The whole point of the
+integration is this seam: a genuinely different source absorbed here, with nothing
+downstream changed.
+
+**What the adapter has to absorb.** The mismatch is bigger than the Postgres one.
+KicksDB is two endpoints, not one schema: StockX carries the current market price,
+GOAT carries the release date, and they join on a SKU that StockX writes
+`DD1391-100` and GOAT writes `DD1391 100`, so I normalize both to one key. It's a
+product-grained current snapshot, not a transaction stream (the `sales/daily`
+route returns null and `variants` is 403 on this key), so each product lands as one
+canonical sale at the snapshot date, priced at the current market. That's a current
+observation, not a historical transaction, which is why extending the training set
+from KicksDB stayed out of scope: the history to support it isn't there.
+
+**The retail decision, in code.** Retail isn't in the API on Starter (Phase 0
+recon). I carry it from a SKU-keyed reference (`config/kicksdb_retail_reference.json`)
+and exclude any product I can't resolve a retail for, counting the drops. Two
+things the real SKUs forced. StockX ships some shoes with a compound style code
+(the adidas Samba comes back as `BZ0057/B75806`), so the SKU match has to try each
+component or a coverable product gets dropped and mis-counted as retail-less. And a
+reference is only as good as its keys, so the adapter cross-checks the reference
+brand against the brand the market source returns for a SKU and excludes on a
+mismatch, rather than pairing, say, a Dunk's retail with a Jordan's price. In the
+fixture set 13 of 14 land; the one that doesn't is a KAWS Air Force 1 that StockX
+files under the base AF1 style code, a genuinely different and pricier shoe I have
+no retail for, so it's excluded and counted. No fabricated retail to make the
+pipeline look complete.
+
+**The bug the byte-compatibility test caught.** GOAT hands back release dates with a
+`Z` suffix, so they parsed as tz-aware `datetime64[us, UTC]` while the canonical
+layout is tz-naive. The adapter looked done, and the pipeline would have carried a
+subtly different dtype into the lake. The test that asserts the KicksDB landing is
+byte-identical to the synthetic landing failed on it, and I normalize release and
+drop dates to tz-naive canonical dates now. That test is the deliverable as much as
+the code is.
+
+**It runs clean end to end.** `ingest --source kicksdb -> features -> validate`
+passes at 100% row retention with no change to the Spark feature stage or the
+Pandera contract. If validate had failed, the mismatch would have leaked past the
+adapter; it didn't. Premiums land between -0.49 and 25.4, inside the contract's
+[-1, 50]. A Spark test runs the same path in CI.
+
+**Cost.** KicksDB Starter is 29 EUR/month, accepted. The client caches per product
+and backs off on 429. Recon and fixture capture together spent under 80 requests
+against the 50,000/month cap.
+
+---
+
+## KicksDB recon: what the Starter API actually returns, and the retail-price call
+
+**What I found**
+
+Before writing the adapter I stood up a throwaway probe against the Starter key and
+hit the real endpoints. The one question that gates everything was retail price per
+sneaker, because the premium target is `(sale_price - retail_price) / retail_price`
+and the model is useless without both halves. The answer is the hard one: on the
+Starter tier there is no usable retail price.
+
+The StockX product endpoint returns catalog metadata plus a current market
+snapshot, `min_price`/`max_price`/`avg_price` across sizes, populated and sensible
+(Dunk "Panda" avg 78, Yeezy "Zebra" 302, Off-White "Chicago" 5015). No retail
+field, no release date. GOAT carries `release_date` (populated) and `sku`, and a
+`retail_prices` field that came back null for every mainline product I sampled,
+with per-size `lowest_ask` at 0. So StockX gives current market, GOAT gives release
+date, and neither gives retail. No historical sales either: `sales/daily` returns
+null on this key and `variants` returns 403. Starter is a current snapshot, not a
+sales stream.
+
+**The retail-price call.** Retail isn't fabricated. I carry it from a SKU-keyed
+reference table: real retail for the shoes I have it for, nothing for the ones I
+don't. The adapter joins the StockX market and GOAT release date to reference
+retail on a normalized SKU; a product with no reference match is excluded and
+counted, and the premium is simply not computed for it. The tradeoff: retail is
+decoupled from the live source and only as good as the reference I maintain, so
+coverage of brand-new releases is bounded by how current I keep that table. I'd
+rather have honest gaps than a proxy retail polluting the target. The alternatives
+were marking everything uncomputable (nothing would land) or a labelled proxy (a
+synthetic number leaking into the target), and both are worse.
+
+**ToS.** KicksDB's terms grant a non-exclusive right to use, cache, resell, or
+redistribute the API data, and disclaim ownership of the underlying StockX and GOAT
+data. That covers committing trimmed sample responses to this public repo and
+showing KicksDB-derived predictions in the demo. The fixtures I commit strip the
+affiliate `link` fields (a publisher id, KicksDB's routing, not sneaker data) and
+the CDN image galleries, keeping just the metadata and prices the adapter reads.
+The one gray spot, that the terms don't name public GitHub commits explicitly, is
+covered by the redistribute grant; I read it as permitted and noted it here rather
+than assuming it silently.
+
+**Budget.** Recon spent under 40 requests against the 50,000/month Starter cap.
+Auth is a plain `Authorization` header, documented limit 640/min, no 429s.
+
+**Next up**
+
+Build the adapter as a third ingest mode and prove the anti-corruption layer
+absorbs it with nothing downstream changed.
+
+---
+
 ## AWS deployment: App Runner, ECR, S3, and proving the storage claim
 
 **What I built**
