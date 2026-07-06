@@ -60,10 +60,13 @@ Either way, note the full `s3://.../model.pt` path; that's your `model_uri`.
 
 Locally:
 
+App Runner runs on **x86_64**, so build for `linux/amd64` even on an ARM Mac
+(otherwise the service fails with "exec format error").
+
 ```bash
 aws ecr get-login-password --region <region> \
   | docker login --username AWS --password-stdin <ecr_repository_url>
-docker build -f serving/Dockerfile -t <ecr_repository_url>:latest .
+docker build --platform linux/amd64 -f serving/Dockerfile -t <ecr_repository_url>:latest .
 docker push <ecr_repository_url>:latest
 ```
 

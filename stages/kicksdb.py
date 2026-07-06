@@ -431,7 +431,10 @@ def _coerce(rows: list[dict], table: str) -> pd.DataFrame:
             # layout is tz-naive, and a mixed lake would read inconsistently.
             if getattr(series.dtype, "tz", None) is not None:
                 series = series.dt.tz_localize(None)
-            df[col] = series
+            # Pin the resolution to the canonical unit. pandas 2.x infers the unit
+            # (s/us/ns) from the input, so without this cast the in-memory dtype
+            # drifts by pandas version and stops matching CANONICAL_DTYPES.
+            df[col] = series.astype(dtype)
         else:
             df[col] = df[col].astype(dtype)
     return df
