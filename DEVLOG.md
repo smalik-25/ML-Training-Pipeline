@@ -31,15 +31,24 @@ honest point. On the fixtures the typical current shoe sits around +49% while th
 model still says +180%. It fills in from the first scheduled pull; a clean clone
 with no history shows a begins-now note.
 
+**On demand, and room to grow.** A "check for latest" button busts the cache to
+pull the freshest published snapshot without the Space ever calling KicksDB itself,
+so there is no second copy of the transform to drift. And `grow_reference.py`
+scaffolds new reference entries from the live market: it searches KicksDB for a
+curated list of current models, pulls their real SKUs and market price, and
+proposes a retail from a published-MSRP map into a draft I review by hand, with
+collabs and limiteds flagged because model-level retail is not colorway-exact.
+That is how coverage grows past the 13 without fabricating a retail.
+
 **Kept it safe.** The snapshot and the history are generated artifacts, gitignored
 and pushed to the Space by the job, so a stale committed copy can't overwrite a
 fresh one on a redeploy. With nothing published and no key the tab falls back to
 canned records, so a clean clone still runs, and the producer runs on fixtures
 without a key, which is how CI and a local run stay green.
 
-**Next.** An on-demand refresh button, broadening coverage past the 13
-retail-referenced SKUs, and a stricter PSI-against-training version of the trend
-once I pull out the training feature distribution to compare against.
+**Next.** Running the scaffolder against the live market to broaden coverage, and a
+stricter PSI-against-training version of the trend once I pull out the training
+feature distribution to compare against.
 
 ---
 

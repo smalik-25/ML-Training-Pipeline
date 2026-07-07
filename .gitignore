@@ -63,6 +63,10 @@ crash.log
 demo/live_snapshot.json
 demo/drift_history.json
 
+# Scaffolded retail-reference draft -- reviewed by hand, then merged into the
+# real reference; not committed as-is.
+config/kicksdb_retail_reference.draft.json
+
 # OS / editor
 .DS_Store
 .idea/

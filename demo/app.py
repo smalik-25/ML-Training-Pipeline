@@ -595,6 +595,12 @@ with tab_live:
     # The board prefers the scheduled snapshot (the model's premium next to
     # KicksDB's real current market price); a clean clone with no snapshot falls
     # back to canned records scored live through the same transform.
+    if st.button("↻ check for latest", key="refresh_snapshot"):
+        # Bust the five-minute cache to pull the freshest snapshot the refresh job
+        # has published, without calling KicksDB from the Space itself.
+        _load_snapshot.clear()
+        _load_history.clear()
+        st.rerun()
     _snap = _load_snapshot()
     if _snap and _snap.get("board"):
         _stamp = _snap["generated_at"][:16].replace("T", " ")
