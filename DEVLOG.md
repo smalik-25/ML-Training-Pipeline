@@ -11,8 +11,9 @@ and then frozen, and the request counter sat at 52 for a month. Now a scheduled 
 (a GitHub Action, every six hours) pulls the current KicksDB market through the same
 ingest adapter, scores it through the one inference path, and publishes a small
 `live_snapshot.json` straight to the Hugging Face Space. The Space just reads that
-file, so it loads instantly and never calls KicksDB on a visit. The budget is about
-26 requests a run, roughly 3,200 a month, nowhere near the 50,000 cap.
+file, so it loads instantly and never calls KicksDB on a visit. The budget is two
+requests per reference SKU, so about 132 a run at 66 SKUs, roughly 15,800 a month,
+still well under the 50,000 cap.
 
 **The better signal.** The board now carries the model's implied resale next to
 KicksDB's real current market price. That side by side is the out-of-distribution
@@ -47,6 +48,17 @@ releases, whose model-level MSRP is reliable for a general colorway, and left th
 were refreshed to match. The broader board sharpens the point: the median current
 shoe trades a few percent over retail while the model, trained on hyped pairs,
 still says several hundred.
+
+**What the first scheduled run taught me.** The model is gitignored, `*.pt`, so a
+fresh Action checkout doesn't have it, and the first run died looking for
+`demo/model.pt`. Rather than commit a binary into the repo, the job now pulls the
+deployed model straight off the Space and scores with that, so the snapshot always
+reflects the model the demo is actually serving. The drift history needed the same
+treatment for the opposite reason: it has to persist. The checkout is empty every
+run, so the job downloads the prior `drift_history.json` from the Space, appends
+this run's point, and pushes it back. Without that the trend would reset to a single
+point every six hours. The cost is a couple of Space reads a run, which is nothing
+next to already pushing to it.
 
 **Kept it safe.** The snapshot and the history are generated artifacts, gitignored
 and pushed to the Space by the job, so a stale committed copy can't overwrite a
