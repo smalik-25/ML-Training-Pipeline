@@ -1,15 +1,596 @@
 [
-  {"sku": "DD1391-100", "retail_price": 110.0, "release_type": "general", "brand": "Nike", "model": "Dunk Low", "colorway": "White/Black", "silhouette": "Dunk"},
-  {"sku": "DD1503-101", "retail_price": 100.0, "release_type": "general", "brand": "Nike", "model": "Dunk Low", "colorway": "White/Photon Dust", "silhouette": "Dunk"},
-  {"sku": "DN3707-100", "retail_price": 210.0, "release_type": "general", "brand": "Jordan", "model": "Air Jordan 3 Retro", "colorway": "White Cement Reimagined", "silhouette": "Air Jordan 3"},
-  {"sku": "555088-101", "retail_price": 160.0, "release_type": "limited", "brand": "Jordan", "model": "Air Jordan 1 High", "colorway": "Chicago", "silhouette": "Air Jordan 1"},
-  {"sku": "DZ5485-612", "retail_price": 180.0, "release_type": "limited", "brand": "Jordan", "model": "Air Jordan 1 High", "colorway": "Lost and Found", "silhouette": "Air Jordan 1"},
-  {"sku": "555088-134", "retail_price": 170.0, "release_type": "limited", "brand": "Jordan", "model": "Air Jordan 1 High", "colorway": "University Blue", "silhouette": "Air Jordan 1"},
-  {"sku": "308497-060", "retail_price": 200.0, "release_type": "limited", "brand": "Jordan", "model": "Air Jordan 4 Retro", "colorway": "Bred", "silhouette": "Air Jordan 4"},
-  {"sku": "AA3834-101", "retail_price": 190.0, "release_type": "collab", "brand": "Jordan", "model": "Air Jordan 1 High", "colorway": "Off-White Chicago", "silhouette": "Air Jordan 1"},
-  {"sku": "CQ4277-001", "retail_price": 150.0, "release_type": "collab", "brand": "Jordan", "model": "Air Jordan 1 Low", "colorway": "Travis Scott Mocha", "silhouette": "Air Jordan 1"},
-  {"sku": "CP9654", "retail_price": 220.0, "release_type": "limited", "brand": "Adidas", "model": "Yeezy Boost 350 V2", "colorway": "Zebra", "silhouette": "Yeezy 350"},
-  {"sku": "HQ6316", "retail_price": 230.0, "release_type": "limited", "brand": "Adidas", "model": "Yeezy Boost 350 V2", "colorway": "Bone", "silhouette": "Yeezy 350"},
-  {"sku": "B75806", "retail_price": 100.0, "release_type": "general", "brand": "Adidas", "model": "Samba OG", "colorway": "Black White", "silhouette": "Samba"},
-  {"sku": "BB550WT1", "retail_price": 110.0, "release_type": "general", "brand": "New Balance", "model": "550", "colorway": "White Green", "silhouette": "550"}
+  {
+    "sku": "DD1391-100",
+    "retail_price": 110.0,
+    "release_type": "general",
+    "brand": "Nike",
+    "model": "Dunk Low",
+    "colorway": "White/Black",
+    "silhouette": "Dunk"
+  },
+  {
+    "sku": "DD1503-101",
+    "retail_price": 100.0,
+    "release_type": "general",
+    "brand": "Nike",
+    "model": "Dunk Low",
+    "colorway": "White/Photon Dust",
+    "silhouette": "Dunk"
+  },
+  {
+    "sku": "DN3707-100",
+    "retail_price": 210.0,
+    "release_type": "general",
+    "brand": "Jordan",
+    "model": "Air Jordan 3 Retro",
+    "colorway": "White Cement Reimagined",
+    "silhouette": "Air Jordan 3"
+  },
+  {
+    "sku": "555088-101",
+    "retail_price": 160.0,
+    "release_type": "limited",
+    "brand": "Jordan",
+    "model": "Air Jordan 1 High",
+    "colorway": "Chicago",
+    "silhouette": "Air Jordan 1"
+  },
+  {
+    "sku": "DZ5485-612",
+    "retail_price": 180.0,
+    "release_type": "limited",
+    "brand": "Jordan",
+    "model": "Air Jordan 1 High",
+    "colorway": "Lost and Found",
+    "silhouette": "Air Jordan 1"
+  },
+  {
+    "sku": "555088-134",
+    "retail_price": 170.0,
+    "release_type": "limited",
+    "brand": "Jordan",
+    "model": "Air Jordan 1 High",
+    "colorway": "University Blue",
+    "silhouette": "Air Jordan 1"
+  },
+  {
+    "sku": "308497-060",
+    "retail_price": 200.0,
+    "release_type": "limited",
+    "brand": "Jordan",
+    "model": "Air Jordan 4 Retro",
+    "colorway": "Bred",
+    "silhouette": "Air Jordan 4"
+  },
+  {
+    "sku": "AA3834-101",
+    "retail_price": 190.0,
+    "release_type": "collab",
+    "brand": "Jordan",
+    "model": "Air Jordan 1 High",
+    "colorway": "Off-White Chicago",
+    "silhouette": "Air Jordan 1"
+  },
+  {
+    "sku": "CQ4277-001",
+    "retail_price": 150.0,
+    "release_type": "collab",
+    "brand": "Jordan",
+    "model": "Air Jordan 1 Low",
+    "colorway": "Travis Scott Mocha",
+    "silhouette": "Air Jordan 1"
+  },
+  {
+    "sku": "CP9654",
+    "retail_price": 220.0,
+    "release_type": "limited",
+    "brand": "Adidas",
+    "model": "Yeezy Boost 350 V2",
+    "colorway": "Zebra",
+    "silhouette": "Yeezy 350"
+  },
+  {
+    "sku": "HQ6316",
+    "retail_price": 230.0,
+    "release_type": "limited",
+    "brand": "Adidas",
+    "model": "Yeezy Boost 350 V2",
+    "colorway": "Bone",
+    "silhouette": "Yeezy 350"
+  },
+  {
+    "sku": "B75806",
+    "retail_price": 100.0,
+    "release_type": "general",
+    "brand": "Adidas",
+    "model": "Samba OG",
+    "colorway": "Black White",
+    "silhouette": "Samba"
+  },
+  {
+    "sku": "BB550WT1",
+    "retail_price": 110.0,
+    "release_type": "general",
+    "brand": "New Balance",
+    "model": "550",
+    "colorway": "White Green",
+    "silhouette": "550"
+  },
+  {
+    "sku": "IQ1118-220",
+    "retail_price": 115.0,
+    "release_type": "general",
+    "brand": "Nike",
+    "model": "Dunk Low",
+    "colorway": "Pegasus Pack Linen Phantom",
+    "silhouette": "Dunk Low"
+  },
+  {
+    "sku": "HF5441-107",
+    "retail_price": 115.0,
+    "release_type": "general",
+    "brand": "Nike",
+    "model": "Dunk Low",
+    "colorway": "White Midnight Navy",
+    "silhouette": "Dunk Low"
+  },
+  {
+    "sku": "DD1391-103",
+    "retail_price": 115.0,
+    "release_type": "general",
+    "brand": "Nike",
+    "model": "Dunk Low",
+    "colorway": "Grey Fog",
+    "silhouette": "Dunk Low"
+  },
+  {
+    "sku": "DD1399-105",
+    "retail_price": 125.0,
+    "release_type": "general",
+    "brand": "Nike",
+    "model": "Dunk High",
+    "colorway": "Panda Black White (2021/2024)",
+    "silhouette": "Dunk High"
+  },
+  {
+    "sku": "HJ4320-001",
+    "retail_price": 125.0,
+    "release_type": "general",
+    "brand": "Nike",
+    "model": "Dunk High",
+    "colorway": "Wu-Tang (2024)",
+    "silhouette": "Dunk High"
+  },
+  {
+    "sku": "DD1869-103",
+    "retail_price": 125.0,
+    "release_type": "general",
+    "brand": "Nike",
+    "model": "Dunk High",
+    "colorway": "Panda (2021) (Women's)",
+    "silhouette": "Dunk High"
+  },
+  {
+    "sku": "FJ4146-104",
+    "retail_price": 115.0,
+    "release_type": "general",
+    "brand": "Nike",
+    "model": "Air Force 1",
+    "colorway": "White Midnight Navy (2024)",
+    "silhouette": "Air Force 1"
+  },
+  {
+    "sku": "FJ4146-106",
+    "retail_price": 115.0,
+    "release_type": "general",
+    "brand": "Nike",
+    "model": "Air Force 1",
+    "colorway": "Dragon Red",
+    "silhouette": "Air Force 1"
+  },
+  {
+    "sku": "FQ8713-100",
+    "retail_price": 115.0,
+    "release_type": "general",
+    "brand": "Nike",
+    "model": "Air Force 1",
+    "colorway": "Vintage Green",
+    "silhouette": "Air Force 1"
+  },
+  {
+    "sku": "DJ4703-900",
+    "retail_price": 130.0,
+    "release_type": "general",
+    "brand": "Nike",
+    "model": "Air Max 90",
+    "colorway": "Familia",
+    "silhouette": "Air Max 90"
+  },
+  {
+    "sku": "DV2120-900",
+    "retail_price": 130.0,
+    "release_type": "general",
+    "brand": "Nike",
+    "model": "Air Max 90",
+    "colorway": "Denim Light Wash",
+    "silhouette": "Air Max 90"
+  },
+  {
+    "sku": "DM6920-900",
+    "retail_price": 130.0,
+    "release_type": "general",
+    "brand": "Nike",
+    "model": "Air Max 90",
+    "colorway": "Familia (PS)",
+    "silhouette": "Air Max 90"
+  },
+  {
+    "sku": "IQ2932-100",
+    "retail_price": 150.0,
+    "release_type": "general",
+    "brand": "Nike",
+    "model": "Air Max 1",
+    "colorway": "Atlanta Braves City Connect (2026)",
+    "silhouette": "Air Max 1"
+  },
+  {
+    "sku": "II7055-100",
+    "retail_price": 150.0,
+    "release_type": "general",
+    "brand": "Nike",
+    "model": "Air Max 1",
+    "colorway": "Patta Waves White Hyper Crimson (With Bracelet)",
+    "silhouette": "Air Max 1"
+  },
+  {
+    "sku": "IQ2894-100",
+    "retail_price": 150.0,
+    "release_type": "general",
+    "brand": "Nike",
+    "model": "Air Max 1",
+    "colorway": "Baltimore Orioles City Connect (2026)",
+    "silhouette": "Air Max 1"
+  },
+  {
+    "sku": "HF6998-600",
+    "retail_price": 160.0,
+    "release_type": "general",
+    "brand": "Nike",
+    "model": "Vomero 5",
+    "colorway": "Pearl Pink Bleached Lilac Summit White Vast Grey (GS)",
+    "silhouette": "Vomero 5"
+  },
+  {
+    "sku": "HF6998-014",
+    "retail_price": 160.0,
+    "release_type": "general",
+    "brand": "Nike",
+    "model": "Vomero 5",
+    "colorway": "Ghost Summit White (GS)",
+    "silhouette": "Vomero 5"
+  },
+  {
+    "sku": "HF6998-007",
+    "retail_price": 160.0,
+    "release_type": "general",
+    "brand": "Nike",
+    "model": "Vomero 5",
+    "colorway": "Black (GS)",
+    "silhouette": "Vomero 5"
+  },
+  {
+    "sku": "CN0149-001",
+    "retail_price": 110.0,
+    "release_type": "general",
+    "brand": "Nike",
+    "model": "P-6000",
+    "colorway": "Metallic Silver",
+    "silhouette": "P-6000"
+  },
+  {
+    "sku": "CD6404-002",
+    "retail_price": 110.0,
+    "release_type": "general",
+    "brand": "Nike",
+    "model": "P-6000",
+    "colorway": "Black",
+    "silhouette": "P-6000"
+  },
+  {
+    "sku": "CD6404-107",
+    "retail_price": 110.0,
+    "release_type": "general",
+    "brand": "Nike",
+    "model": "P-6000",
+    "colorway": "White Metallic Silver Black",
+    "silhouette": "P-6000"
+  },
+  {
+    "sku": "CZ0790-400",
+    "retail_price": 150.0,
+    "release_type": "general",
+    "brand": "Jordan",
+    "model": "Air Jordan 1 Low",
+    "colorway": "Obsidian UNC",
+    "silhouette": "Air Jordan 1 Low"
+  },
+  {
+    "sku": "CZ0790-107",
+    "retail_price": 150.0,
+    "release_type": "general",
+    "brand": "Jordan",
+    "model": "Air Jordan 1 Low",
+    "colorway": "Rookie of the Year",
+    "silhouette": "Air Jordan 1 Low"
+  },
+  {
+    "sku": "CZ0790-003",
+    "retail_price": 150.0,
+    "release_type": "general",
+    "brand": "Jordan",
+    "model": "Air Jordan 1 Low",
+    "colorway": "Shadow (2024)",
+    "silhouette": "Air Jordan 1 Low"
+  },
+  {
+    "sku": "BZ0057/B75806",
+    "retail_price": 100.0,
+    "release_type": "general",
+    "brand": "Adidas",
+    "model": "Samba OG",
+    "colorway": "Cloud White Core Black",
+    "silhouette": "Samba OG"
+  },
+  {
+    "sku": "JI2734",
+    "retail_price": 100.0,
+    "release_type": "general",
+    "brand": "Adidas",
+    "model": "Samba OG",
+    "colorway": "Preloved Red Leopard (Women's)",
+    "silhouette": "Samba OG"
+  },
+  {
+    "sku": "IH9052",
+    "retail_price": 100.0,
+    "release_type": "general",
+    "brand": "Adidas",
+    "model": "Samba OG",
+    "colorway": "Rhinestone Black Silver (Women's)",
+    "silhouette": "Samba OG"
+  },
+  {
+    "sku": "IH3641",
+    "retail_price": 100.0,
+    "release_type": "general",
+    "brand": "Adidas",
+    "model": "Gazelle",
+    "colorway": "CLOT Linen Khaki",
+    "silhouette": "Gazelle"
+  },
+  {
+    "sku": "IH3144",
+    "retail_price": 100.0,
+    "release_type": "general",
+    "brand": "Adidas",
+    "model": "Gazelle",
+    "colorway": "CLOT Halo Ivory",
+    "silhouette": "Gazelle"
+  },
+  {
+    "sku": "BB5476",
+    "retail_price": 100.0,
+    "release_type": "general",
+    "brand": "Adidas",
+    "model": "Gazelle",
+    "colorway": "Core Black Cloud White Gold",
+    "silhouette": "Gazelle"
+  },
+  {
+    "sku": "HQ8708",
+    "retail_price": 110.0,
+    "release_type": "general",
+    "brand": "Adidas",
+    "model": "Campus 00s",
+    "colorway": "Core Black",
+    "silhouette": "Campus 00s"
+  },
+  {
+    "sku": "KJ8851",
+    "retail_price": 110.0,
+    "release_type": "general",
+    "brand": "Adidas",
+    "model": "Campus 00s",
+    "colorway": "Bape World Cup Pack Black White",
+    "silhouette": "Campus 00s"
+  },
+  {
+    "sku": "HQ8707",
+    "retail_price": 110.0,
+    "release_type": "general",
+    "brand": "Adidas",
+    "model": "Campus 00s",
+    "colorway": "Grey White",
+    "silhouette": "Campus 00s"
+  },
+  {
+    "sku": "BB550PB/BB550PB1",
+    "retail_price": 120.0,
+    "release_type": "general",
+    "brand": "New Balance",
+    "model": "550",
+    "colorway": "White Grey",
+    "silhouette": "550"
+  },
+  {
+    "sku": "BB550HA1",
+    "retail_price": 120.0,
+    "release_type": "general",
+    "brand": "New Balance",
+    "model": "550",
+    "colorway": "White Black",
+    "silhouette": "550"
+  },
+  {
+    "sku": "M990GL6",
+    "retail_price": 200.0,
+    "release_type": "general",
+    "brand": "New Balance",
+    "model": "990v6",
+    "colorway": "MiUSA Grey",
+    "silhouette": "990v6"
+  },
+  {
+    "sku": "U990WB6",
+    "retail_price": 200.0,
+    "release_type": "general",
+    "brand": "New Balance",
+    "model": "990v6",
+    "colorway": "MiUSA Teddy Santis White Black Plum",
+    "silhouette": "990v6"
+  },
+  {
+    "sku": "U990TN6",
+    "retail_price": 200.0,
+    "release_type": "general",
+    "brand": "New Balance",
+    "model": "990v6",
+    "colorway": "MiUSA Workwear Grey",
+    "silhouette": "990v6"
+  },
+  {
+    "sku": "M2002RDA",
+    "retail_price": 150.0,
+    "release_type": "general",
+    "brand": "New Balance",
+    "model": "2002R",
+    "colorway": "Protection Pack Rain Cloud",
+    "silhouette": "2002R"
+  },
+  {
+    "sku": "M2002RDB",
+    "retail_price": 150.0,
+    "release_type": "general",
+    "brand": "New Balance",
+    "model": "2002R",
+    "colorway": "Protection Pack Phantom",
+    "silhouette": "2002R"
+  },
+  {
+    "sku": "M2002RBL",
+    "retail_price": 150.0,
+    "release_type": "general",
+    "brand": "New Balance",
+    "model": "2002R",
+    "colorway": "Black Dark Grey",
+    "silhouette": "2002R"
+  },
+  {
+    "sku": "U9060BPM",
+    "retail_price": 150.0,
+    "release_type": "general",
+    "brand": "New Balance",
+    "model": "9060",
+    "colorway": "Triple Black",
+    "silhouette": "9060"
+  },
+  {
+    "sku": "U9060BLK",
+    "retail_price": 150.0,
+    "release_type": "general",
+    "brand": "New Balance",
+    "model": "9060",
+    "colorway": "Black Castlerock Grey",
+    "silhouette": "9060"
+  },
+  {
+    "sku": "U9060GRY",
+    "retail_price": 150.0,
+    "release_type": "general",
+    "brand": "New Balance",
+    "model": "9060",
+    "colorway": "Rain Cloud Grey",
+    "silhouette": "9060"
+  },
+  {
+    "sku": "1203A537-110",
+    "retail_price": 160.0,
+    "release_type": "general",
+    "brand": "Asics",
+    "model": "Gel-Kayano 14",
+    "colorway": "White Graphite Grey",
+    "silhouette": "Gel-Kayano 14"
+  },
+  {
+    "sku": "1203A537-103",
+    "retail_price": 160.0,
+    "release_type": "general",
+    "brand": "Asics",
+    "model": "Gel-Kayano 14",
+    "colorway": "Cream Sweet Pink",
+    "silhouette": "Gel-Kayano 14"
+  },
+  {
+    "sku": "1201A019-006",
+    "retail_price": 160.0,
+    "release_type": "general",
+    "brand": "Asics",
+    "model": "Gel-Kayano 14",
+    "colorway": "Black Pure Silver",
+    "silhouette": "Gel-Kayano 14"
+  },
+  {
+    "sku": "L49209900",
+    "retail_price": 200.0,
+    "release_type": "general",
+    "brand": "Salomon",
+    "model": "XT-6",
+    "colorway": "Earth Brown Walnut",
+    "silhouette": "XT-6"
+  },
+  {
+    "sku": "L41252900",
+    "retail_price": 200.0,
+    "release_type": "general",
+    "brand": "Salomon",
+    "model": "XT-6",
+    "colorway": "White Lunar Rock",
+    "silhouette": "XT-6"
+  },
+  {
+    "sku": "L41086600",
+    "retail_price": 200.0,
+    "release_type": "general",
+    "brand": "Salomon",
+    "model": "XT-6",
+    "colorway": "Triple Black",
+    "silhouette": "XT-6"
+  },
+  {
+    "sku": "406394-01",
+    "retail_price": 100.0,
+    "release_type": "general",
+    "brand": "Puma",
+    "model": "Speedcat",
+    "colorway": "Leopard Black Warm White (Women's)",
+    "silhouette": "Speedcat"
+  },
+  {
+    "sku": "403356-01",
+    "retail_price": 100.0,
+    "release_type": "general",
+    "brand": "Puma",
+    "model": "Speedcat",
+    "colorway": "Zebra (Women's)",
+    "silhouette": "Speedcat"
+  },
+  {
+    "sku": "403689-01",
+    "retail_price": 100.0,
+    "release_type": "general",
+    "brand": "Puma",
+    "model": "Speedcat",
+    "colorway": "Metallic Silver Black",
+    "silhouette": "Speedcat"
+  }
 ]

@@ -40,13 +40,21 @@ proposes a retail from a published-MSRP map into a draft I review by hand, with
 collabs and limiteds flagged because model-level retail is not colorway-exact.
 That is how coverage grows past the 13 without fabricating a retail.
 
+Run against the live market, it found 70 current SKUs. I merged the 53 general
+releases, whose model-level MSRP is reliable for a general colorway, and left the
+17 collabs and limiteds for a by-hand retail pass, taking the reference from 13 to
+66 and the offline board from a dozen shoes to fifty-nine. The committed fixtures
+were refreshed to match. The broader board sharpens the point: the median current
+shoe trades a few percent over retail while the model, trained on hyped pairs,
+still says several hundred.
+
 **Kept it safe.** The snapshot and the history are generated artifacts, gitignored
 and pushed to the Space by the job, so a stale committed copy can't overwrite a
 fresh one on a redeploy. With nothing published and no key the tab falls back to
 canned records, so a clean clone still runs, and the producer runs on fixtures
 without a key, which is how CI and a local run stay green.
 
-**Next.** Running the scaffolder against the live market to broaden coverage, and a
+**Next.** A by-hand retail pass on the 17 flagged collabs and limiteds, and a
 stricter PSI-against-training version of the trend once I pull out the training
 feature distribution to compare against.
 
