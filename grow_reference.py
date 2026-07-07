@@ -115,14 +115,19 @@ def candidate_from_product(
     except (TypeError, ValueError):
         market = 0.0
     title = product.get("title") or ""
-    release_type = classify_release_type(title) or seed["release_type"]
+    # Trust the seed's curated type; only upgrade to collab when the title names a
+    # collaborator. So a plain retro keeps its seed "limited" and is flagged for
+    # retail review, rather than being downgraded to "general" and skipped.
+    release_type = (
+        "collab" if classify_release_type(title) == "collab" else seed["release_type"]
+    )
     return {
         "sku": sku,
         "retail_price": float(seed["retail"]),
         "release_type": release_type,
         "brand": seed.get("brand") or product.get("brand") or "",
         "model": seed.get("model") or product.get("model") or "",
-        "colorway": title,
+        "colorway": product.get("secondary_title") or title,
         "silhouette": seed.get("model", ""),
         "_market": market,  # review context, not a reference field
         "_review": release_type in ("collab", "limited"),  # confirm retail
