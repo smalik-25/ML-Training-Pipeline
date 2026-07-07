@@ -4,6 +4,45 @@ Notes on what I built and why, newest entries first.
 
 ---
 
+## KicksDB goes live: a scheduled market snapshot the demo reads
+
+**What I built.** The Live Market tab was showing real KicksDB data captured once
+and then frozen, and the request counter sat at 52 for a month. Now a scheduled job
+(a GitHub Action, every six hours) pulls the current KicksDB market through the same
+ingest adapter, scores it through the one inference path, and publishes a small
+`live_snapshot.json` straight to the Hugging Face Space. The Space just reads that
+file, so it loads instantly and never calls KicksDB on a visit. The budget is about
+26 requests a run, roughly 3,200 a month, nowhere near the 50,000 cap.
+
+**The better signal.** The board now carries the model's implied resale next to
+KicksDB's real current market price. That side by side is the out-of-distribution
+story made concrete: the model implies 808 dollars on a Dunk the market has at 78,
+and it under-shoots the genuinely hyped pairs the other way, implying 532 on an
+Off-White AJ1 that trades near 5,015. The gap between the two columns is the whole
+point, and now it moves with the market instead of being asserted with a fixed
+number.
+
+**A trend, not just a snapshot.** The refresh job records a point every run: the
+median current shoe's market premium next to the model's, so the gap becomes a line
+that moves as the market shifts and the shoes age, instead of a single number.
+Median, not mean, because a couple of hyped pairs (an Off-White AJ1 trading near 25
+times retail) blow up the average and bury the typical-shoe story, which is the
+honest point. On the fixtures the typical current shoe sits around +49% while the
+model still says +180%. It fills in from the first scheduled pull; a clean clone
+with no history shows a begins-now note.
+
+**Kept it safe.** The snapshot and the history are generated artifacts, gitignored
+and pushed to the Space by the job, so a stale committed copy can't overwrite a
+fresh one on a redeploy. With nothing published and no key the tab falls back to
+canned records, so a clean clone still runs, and the producer runs on fixtures
+without a key, which is how CI and a local run stay green.
+
+**Next.** An on-demand refresh button, broadening coverage past the 13
+retail-referenced SKUs, and a stricter PSI-against-training version of the trend
+once I pull out the training feature distribution to compare against.
+
+---
+
 ## The dashboard, retold as one story: three tabs, one boundary
 
 **Why.** The demo had grown a bolted-on "current market · KicksDB" section

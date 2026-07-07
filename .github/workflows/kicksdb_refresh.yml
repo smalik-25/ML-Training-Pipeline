@@ -1,0 +1,59 @@
+name: kicksdb-snapshot-refresh
+
+# Pull the current KicksDB market on a schedule, score it, and publish the
+# snapshot the Streamlit Space reads. Budget: ~26 requests per run (13 SKUs x 2),
+# so every 6 hours is ~4 runs/day, ~3.2k/month, well under the 50,000 cap.
+on:
+  schedule:
+    - cron: "0 */6 * * *"
+  workflow_dispatch: {}
+
+# Never let refresh runs stack up and burn extra requests.
+concurrency:
+  group: kicksdb-refresh
+  cancel-in-progress: true
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      # The snapshot producer only needs the scoring + adapter path, not the
+      # Spark/Ray/MLflow stack, so install the light deps and the package without
+      # its heavy ones. If a first run errors on a missing import, add that dep here.
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install pandas pyarrow numpy fsspec pyyaml requests
+          pip install -e . --no-deps
+
+      - name: Pull the current KicksDB market and score it
+        env:
+          KICKSDB_API_KEY: ${{ secrets.KICKSDB_API_KEY }}
+        run: python refresh_market_snapshot.py --run-date "$(date -u +%F)"
+
+      - name: Publish the snapshot to the Hugging Face Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          pip install "huggingface_hub>=0.20"
+          python - <<'PY'
+          import os
+          from huggingface_hub import upload_file
+
+          upload_file(
+              path_or_fileobj="demo/live_snapshot.json",
+              path_in_repo="live_snapshot.json",
+              repo_id="smalik25/sneaker-ml-platform",
+              repo_type="space",
+              token=os.environ["HF_TOKEN"],
+              commit_message="refresh live market snapshot",
+          )
+          PY

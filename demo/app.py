@@ -12,6 +12,7 @@ structure, decimal indices, no emoji).
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import streamlit as st
@@ -19,6 +20,8 @@ import streamlit as st
 from net import FEATURE_COLUMNS, load_bundle, predict
 
 MODEL_PATH = str(Path(__file__).parent / "model.pt")
+SNAPSHOT_PATH = Path(__file__).parent / "live_snapshot.json"
+HISTORY_PATH = Path(__file__).parent / "drift_history.json"
 REPO_URL = "https://github.com/smalik-25/ML-Training-Pipeline"
 SNEAKER_INTEL_URL = "https://sneaker-intel-2.streamlit.app/"
 WEBSITE_URL = "https://sam-malik.com"
@@ -296,6 +299,68 @@ def _bundle():
     return load_bundle(MODEL_PATH)
 
 
+@st.cache_data(ttl=300)
+def _load_snapshot() -> dict | None:
+    """The scheduled KicksDB market snapshot, if the refresh job has published one.
+
+    Cached for five minutes so the Space picks up a freshly pushed snapshot without
+    a restart and never blocks a page load on the file read. Missing file means a
+    clean clone with no snapshot yet, so the tab falls back to canned records.
+    """
+    try:
+        return json.loads(SNAPSHOT_PATH.read_text())
+    except (FileNotFoundError, json.JSONDecodeError):
+        return None
+
+
+@st.cache_data(ttl=300)
+def _load_history() -> list | None:
+    """The rolling market-vs-model drift history the refresh job accumulates."""
+    try:
+        data = json.loads(HISTORY_PATH.read_text())
+        return data if isinstance(data, list) else None
+    except (FileNotFoundError, json.JSONDecodeError):
+        return None
+
+
+def _trend_svg(history: list) -> str:
+    """A two-line sparkline: market premium vs the model's, over time.
+
+    Phosphor is the real market, oxblood is the model. The hairline is retail
+    (premium 0). As shoes age and the market moves, the gap between the lines is
+    the drift a single snapshot can only assert.
+    """
+    market = [h["market_premium"] for h in history]
+    model = [h["model_premium"] for h in history]
+    lo = min(min(market), min(model), 0.0)
+    hi = max(max(market), max(model))
+    span = (hi - lo) or 1.0
+    w, h = 100.0, 30.0
+    n = len(history)
+
+    def _line(series: list) -> str:
+        return " ".join(
+            f"{i / (n - 1) * w:.2f},{h - (v - lo) / span * h:.2f}"
+            for i, v in enumerate(series)
+        )
+
+    zero_y = h - (0.0 - lo) / span * h
+    return (
+        f'<svg viewBox="0 0 {w:.0f} {h:.0f}" preserveAspectRatio="none" '
+        'style="width:100%;height:130px;display:block;border:1px solid var(--hairline);'
+        'background:var(--slab)">'
+        f'<line x1="0" y1="{zero_y:.2f}" x2="{w:.0f}" y2="{zero_y:.2f}" '
+        'stroke="var(--hairline-2)" stroke-width="0.4" stroke-dasharray="2 2"/>'
+        f'<polyline points="{_line(model)}" fill="none" '
+        'stroke="var(--oxblood-lift)" stroke-width="0.9" '
+        'vector-effect="non-scaling-stroke"/>'
+        f'<polyline points="{_line(market)}" fill="none" '
+        'stroke="var(--phosphor)" stroke-width="0.9" '
+        'vector-effect="non-scaling-stroke"/>'
+        "</svg>"
+    )
+
+
 def rule(label: str) -> None:
     st.markdown(
         f'<div class="sm-rule"><span class="lab">{label}</span>'
@@ -502,12 +567,14 @@ with tab_live:
     # ----------------------------------------------------------------------- #
     rule("§ 2.2 — OFF THE END OF THE DATA")
     lede(
-        "The predictions below run hot. A current Dunk comes back around +460% over "
-        "retail when it actually trades near retail today. This is not the model "
-        "breaking. It is the model doing exactly what a model does off the end of its "
-        "training data: it learned that hyped 2017–2019 pairs carried large premiums, "
-        "it has never seen a 2026 general-release Dunk, so it extrapolates the only "
-        "thing it knows.",
+        "The predictions below run hot. The model puts a premium of several times "
+        "retail on a current Dunk that KicksDB's live market has trading near or "
+        "below it, and it under-shoots the genuinely hyped pairs the other way. The "
+        "gap between the model column and the KicksDB market column is the whole "
+        "story. This is not the model breaking. It is the model doing exactly what a "
+        "model does off the end of its training data: it learned that hyped 2017–2019 "
+        "pairs carried large premiums, it has never seen a 2026 general-release Dunk, "
+        "so it extrapolates the only thing it knows.",
         top=".2rem",
     )
     lede(
@@ -525,26 +592,47 @@ with tab_live:
         top="1rem",
     )
 
-    # current sneaker cards, scored hot
-    _kick_cards = ""
-    for _item in CURRENT_KICKSDB:
-        _prem = float(predict(_bundle(), [_kicksdb_record(_item)])[0])
-        _kick_cards += (
-            f'<div class="sm-field hot"><div class="k">{_item["name"]} '
-            f'<span class="idx">· {_item["note"]}</span></div>'
-            f'<div class="v">{_prem * 100:+.0f}%<span class="u"> premium</span></div>'
-            f'<div class="k" style="margin-top:6px">${_item["retail"]:.0f} retail '
-            f'· ~${_item["retail"] * (1 + _prem):,.0f} implied resale</div></div>'
+    # The board prefers the scheduled snapshot (the model's premium next to
+    # KicksDB's real current market price); a clean clone with no snapshot falls
+    # back to canned records scored live through the same transform.
+    _snap = _load_snapshot()
+    if _snap and _snap.get("board"):
+        _stamp = _snap["generated_at"][:16].replace("T", " ")
+        _src = "live KicksDB" if _snap.get("source") == "live" else "canned snapshot"
+        st.markdown(
+            f'<p class="sm-label" style="margin:.2rem 0 .9rem">updated {_stamp} UTC '
+            f"· {_snap['n_scored']} shoes scored · {_src}</p>",
+            unsafe_allow_html=True,
         )
-    # the uncomputable one: no retail in the reference, so no premium, reported not scored
-    _kick_cards += (
-        f'<div class="sm-field dim"><div class="k">{UNCOMPUTABLE_KICKSDB["name"]} '
-        f'<span class="idx">· {UNCOMPUTABLE_KICKSDB["note"]}</span></div>'
-        '<div class="v">—<span class="u"> uncomputable</span></div>'
-        '<div class="k" style="margin-top:6px">no retail · not scored</div></div>'
-    )
+        _kick_cards = "".join(
+            f'<div class="sm-field hot"><div class="k">{_b["name"]} '
+            f'<span class="idx">· {_b["note"]}</span></div>'
+            f'<div class="v">{_b["premium"] * 100:+.0f}%<span class="u"> model</span></div>'
+            f'<div class="k" style="margin-top:6px">${_b["retail"]:.0f} retail · '
+            f'implies ${_b["implied_resale"]:,.0f}</div>'
+            f'<div class="k" style="color:var(--bone-dim)">KicksDB market '
+            f'${_b["market"]:,.0f}</div></div>'
+            for _b in _snap["board"]
+        )
+    else:
+        _kick_cards = ""
+        for _item in CURRENT_KICKSDB:
+            _prem = float(predict(_bundle(), [_kicksdb_record(_item)])[0])
+            _kick_cards += (
+                f'<div class="sm-field hot"><div class="k">{_item["name"]} '
+                f'<span class="idx">· {_item["note"]}</span></div>'
+                f'<div class="v">{_prem * 100:+.0f}%<span class="u"> model</span></div>'
+                f'<div class="k" style="margin-top:6px">${_item["retail"]:.0f} retail '
+                f'· implies ${_item["retail"] * (1 + _prem):,.0f}</div></div>'
+            )
+        _kick_cards += (
+            f'<div class="sm-field dim"><div class="k">{UNCOMPUTABLE_KICKSDB["name"]} '
+            f'<span class="idx">· {UNCOMPUTABLE_KICKSDB["note"]}</span></div>'
+            '<div class="v">—<span class="u"> uncomputable</span></div>'
+            '<div class="k" style="margin-top:6px">no retail · not scored</div></div>'
+        )
     st.markdown(
-        '<div class="sm-grid" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr))">'
+        '<div class="sm-grid" style="grid-template-columns:repeat(auto-fit,minmax(210px,1fr))">'
         + _kick_cards + "</div>",
         unsafe_allow_html=True,
     )
@@ -629,6 +717,29 @@ with tab_live:
         "and nothing retrains. The retrain is evidence-driven, not a blind cron.",
         top="1rem",
     )
+
+    # Market-vs-model drift over time, accumulated by the scheduled KicksDB refresh.
+    rule("§ 2.4 — MARKET vs MODEL, OVER TIME")
+    _hist = _load_history()
+    if _hist and len(_hist) >= 2:
+        st.markdown(_trend_svg(_hist), unsafe_allow_html=True)
+        _last = _hist[-1]
+        st.markdown(
+            '<p class="sm-label" style="margin:.7rem 0 0">'
+            '<span style="color:var(--phosphor)">market premium</span> &nbsp; '
+            '<span style="color:var(--oxblood-lift)">model premium</span> &nbsp;·&nbsp; '
+            f'{len(_hist)} points &nbsp;·&nbsp; latest: market '
+            f'{_last["market_premium"] * 100:+.0f}% vs model '
+            f'{_last["model_premium"] * 100:+.0f}%</p>',
+            unsafe_allow_html=True,
+        )
+    else:
+        lede(
+            "The refresh job records a market-vs-model point every six hours, so this "
+            "trend fills in as the market moves and the shoes age. It begins with the "
+            "first scheduled pull.",
+            top=".2rem",
+        )
 
 # =========================================================================== #
 # TAB 3 — HOW IT WORKS (architecture and seams; reworked in a later pass)
