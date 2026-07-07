@@ -4,6 +4,51 @@ Notes on what I built and why, newest entries first.
 
 ---
 
+## The dashboard, retold as one story: three tabs, one boundary
+
+**Why.** The demo had grown a bolted-on "current market · KicksDB" section
+stapled under the original 2017-2019 model card. Two true things sat next to each
+other with nothing reconciling them: the model is a solid, honestly-evaluated
+predictor on its era (val RMSE 0.21), and the moment it scores a current sneaker it
+runs hot and out of distribution, a current Dunk comes back +460%. Read cold, a
+viewer saw either a good model or a broken one depending on which section they
+landed on. The job was to make the second fact read as the intended demonstration
+it is.
+
+**The structure.** One predictor, three tabs, ordered as an argument. The Model is
+the in-distribution story: the predictor defaults to inputs the model actually saw,
+the evaluation stated plainly, so it reads as trustworthy before anything hot
+appears. Live Market is the KicksDB story: current sneakers scored through the same
+inference path, a "then vs now" comparison as the spine, and the drift numbers that
+measure the gap. How It Works is the pipeline and the seams: the anti-corruption
+layer now landing two real sources with a zero-line downstream diff, the one
+inference path, the retail ceiling. Establish the model as sound, show it hit its
+boundary, explain the machinery that makes both legible, in that order.
+
+**The out-of-distribution framing was the load-bearing part.** I named the hot
+behaviour before the viewer finds it, tied the +460% to the two features that
+actually drifted (days_since_release, retail_price) so the prediction and the
+diagnostic tell one story, and framed it as the point rather than the caveat: a
+drift monitor that never fired would be the useless one, this one fires exactly when
+the data moves out from under the model. The colour carries it too. In-distribution
+predictions stay phosphor; the hot cards and the tripped gate go oxblood, so "this
+is the edge" is legible before you read a word.
+
+**Limitations kept visible.** The 13-SKU retail ceiling is stated where a viewer
+would otherwise wonder why some sneakers have no number, with a concrete
+uncomputable card: a KAWS pair with no reference retail, reported and not scored.
+The four drift features a current-only snapshot can't compute are listed with the
+reason each is excluded, not quietly dropped. The PSI bars sit next to the hot
+cards rather than in a separate section, so the prediction and the drift number read
+as the same fact told twice.
+
+**What surprised me.** How little the reframing needed. The +460% didn't change and
+no model logic moved; what changed was the order the viewer meets the facts in and
+one paragraph of framing. That was enough to turn the hot prediction from the thing
+to explain away into the clearest evidence in the project that the monitoring works.
+
+---
+
 ## KicksDB as live inference: scoring today's sneakers through the one path
 
 **What I built**

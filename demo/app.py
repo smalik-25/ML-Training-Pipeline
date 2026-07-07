@@ -1,10 +1,13 @@
 """SAM·MALIK — sneaker ML platform, live demo.
 
-A Streamlit dashboard over the offline ML training pipeline: a live price-premium
-predictor (the real trained model), a model card, the pipeline topology, and the
-real-run monitoring artifacts. Styled to the Sam Malik design system
-(terminal-meets-gothic: phosphor on void, Cormorant / Space Grotesk / IBM Plex
-Mono, hairline structure, decimal indices, no emoji).
+A Streamlit dashboard over the offline ML training pipeline, told as one story
+across three tabs: The Model (the honest 2017-2019 predictor and its evaluation),
+Live Market (current KicksDB sneakers scored through the same path, running hot and
+out of distribution, with the drift monitor that measures the gap), and How It
+Works (the pipeline and the seams, now landing two real sources through one
+anti-corruption layer). Styled to the Sam Malik design system (terminal-meets-
+gothic: phosphor on void, Cormorant / Space Grotesk / IBM Plex Mono, hairline
+structure, decimal indices, no emoji).
 """
 
 from __future__ import annotations
@@ -40,6 +43,7 @@ RUN = {
 RELEASE_TYPES = {"General": 0, "Collab": 1, "Limited": 2}
 
 # Preset sales: full 8-feature vectors, realistic. None = imputed at inference.
+# All three are in-distribution: shapes the 2017-2019 model actually saw.
 PRESETS = {
     "Off-White · limited": dict(
         days_since_release=120, size_us=9.0, retail_price=190.0, size_premium=0.05,
@@ -68,6 +72,31 @@ CURRENT_KICKSDB = [
     {"name": "Off-White × AJ1", "note": "Chicago", "retail": 190.0, "days": 3223, "rt": 1},
     {"name": "Travis Scott × AJ1 Low", "note": "Mocha", "retail": 150.0, "days": 2542, "rt": 1},
     {"name": "Yeezy 350 V2", "note": "Zebra", "retail": 220.0, "days": 1547, "rt": 2},
+]
+
+# A current release with no retail in the 13-SKU reference. Premium can't be
+# computed against a retail we don't have, so it is reported, never scored on a
+# guess. This is the retail-reference coverage ceiling, made concrete.
+UNCOMPUTABLE_KICKSDB = {"name": "KAWS × Air Force 1", "note": "no retail reference"}
+
+# The real drift run: the current KicksDB snapshot against the staging model's
+# 2017-2019 training distribution. PSI per feature; the retrain gate trips at 0.2.
+# A current-only snapshot honestly supports four of the eight features; the two
+# that moved most blow past the threshold. The other four are structurally
+# uncomputable from a snapshot and excluded with a reason rather than measured on
+# degenerate data.
+PSI_THRESHOLD = 0.2
+DRIFT_COMPUTED = [
+    ("days_since_release", 12.0, True),
+    ("retail_price", 1.8, True),
+    ("release_type_encoded", None, False),
+    ("brand_avg_premium", None, False),
+]
+DRIFT_EXCLUDED = [
+    ("size_us", "a snapshot lands one representative size, not real dispersion"),
+    ("size_premium", "needs several sizes per shoe; collapses to 0 on one"),
+    ("rolling_7d_avg_premium", "needs the per-sale history the Starter tier omits"),
+    ("search_index_7d_pre_drop", "needs a pre-drop demand signal a snapshot lacks"),
 ]
 
 
@@ -154,6 +183,11 @@ h1,h2,h3,h4 { font-family: var(--font-display); color: var(--bone);
 .sm-field .v { font-family:var(--font-mono); font-size:1.35rem; color:var(--bone);
   margin-top:6px; }
 .sm-field .u { font-size:.8rem; color:var(--ash); }
+/* out-of-distribution / hot field */
+.sm-field.hot { border-left:2px solid var(--oxblood); }
+.sm-field.hot .v { color:var(--oxblood-lift); }
+.sm-field.dim { opacity:.62; }
+.sm-field.dim .v { color:var(--ash); }
 
 /* stage flow */
 .sm-flow { display:flex; flex-wrap:wrap; gap:0; border:1px solid var(--hairline); }
@@ -176,6 +210,58 @@ h1,h2,h3,h4 { font-family: var(--font-display); color: var(--bone);
 .sm-readout .v { font-family:var(--font-mono); font-size:2.6rem; color:var(--phosphor);
   text-shadow:0 0 14px var(--phosphor-glow); line-height:1.1; margin-top:4px; }
 .sm-readout .sub { font-size:.95rem; color:var(--bone-dim); margin-top:6px; }
+/* hot readout: the out-of-distribution prediction, marked not hidden */
+.sm-readout.hot { border-color:var(--oxblood); background:var(--oxblood-deep); }
+.sm-readout.hot .k { color:var(--oxblood-lift); }
+.sm-readout.hot .v { color:var(--oxblood-lift); text-shadow:0 0 14px rgba(179,48,58,.35); }
+
+/* then vs now comparison */
+.sm-compare { display:grid; grid-template-columns:1fr auto 1fr; gap:0;
+  border:1px solid var(--hairline); }
+.sm-side { background:var(--slab); padding:20px 22px; }
+.sm-side.now { background:var(--oxblood-deep); }
+.sm-side .h { font-family:var(--font-mono); font-size:10.5px; letter-spacing:.14em;
+  text-transform:uppercase; color:var(--ash); }
+.sm-side.now .h { color:var(--oxblood-lift); }
+.sm-side .b { font-family:var(--font-display); font-size:1.4rem; color:var(--bone);
+  margin:8px 0 4px; line-height:1.1; }
+.sm-side .d { font-size:.92rem; color:var(--bone-dim); line-height:1.5; }
+.sm-vs { display:flex; align-items:center; justify-content:center; padding:0 16px;
+  background:var(--void); font-family:var(--font-mono); font-size:11px; color:var(--ash);
+  letter-spacing:.12em; }
+
+/* psi drift bars */
+.sm-psi { border:1px solid var(--hairline); }
+.sm-psi-row { display:grid; grid-template-columns:200px 1fr 96px; align-items:center;
+  gap:14px; padding:11px 16px; border-bottom:1px solid var(--hairline);
+  background:var(--slab); }
+.sm-psi-row:last-child { border-bottom:none; }
+.sm-psi-row .f { font-family:var(--font-mono); font-size:11px; color:var(--bone-dim);
+  letter-spacing:.03em; }
+.sm-psi-track { position:relative; height:9px; background:var(--pitch);
+  border:1px solid var(--hairline); }
+.sm-psi-fill { position:absolute; top:0; bottom:0; left:0; }
+.sm-psi-thresh { position:absolute; top:-3px; bottom:-3px; width:1px;
+  background:var(--bone-dim); }
+.sm-psi-val { font-family:var(--font-mono); font-size:11px; text-align:right; }
+.sm-psi-note { font-family:var(--font-mono); font-size:10.5px; letter-spacing:.03em;
+  color:var(--ash); padding:11px 16px; background:var(--slab);
+  border-bottom:1px solid var(--hairline); }
+.sm-psi-note:last-child { border-bottom:none; }
+.sm-psi-note b { color:var(--bone-dim); font-weight:400; }
+
+/* tab bar */
+[data-baseweb="tab-list"] { gap:2px; background:transparent;
+  border-bottom:1px solid var(--hairline); margin-bottom:1.8rem; }
+[data-baseweb="tab"] { background:transparent !important; border-radius:0;
+  padding:11px 20px 12px; height:auto; }
+[data-baseweb="tab"] [data-testid="stMarkdownContainer"] p,
+[data-baseweb="tab"] p { font-family:var(--font-mono) !important; font-size:11px;
+  letter-spacing:.14em; text-transform:uppercase; color:var(--ash); margin:0; }
+[data-baseweb="tab"][aria-selected="true"] [data-testid="stMarkdownContainer"] p,
+[data-baseweb="tab"][aria-selected="true"] p { color:var(--phosphor); }
+[data-baseweb="tab-highlight"] { background:var(--phosphor); height:2px; }
+[data-baseweb="tab-border"] { background:transparent; }
 
 .sm-foot { font-family:var(--font-mono); font-size:11px; letter-spacing:.1em;
   color:var(--ash); }
@@ -216,194 +302,404 @@ def rule(label: str) -> None:
         f'<span class="line"></span></div>', unsafe_allow_html=True)
 
 
-def field(idx: str, key: str, value: str, unit: str = "") -> str:
+def field(idx: str, key: str, value: str, unit: str = "", cls: str = "") -> str:
     unit = f' <span class="u">{unit}</span>' if unit else ""
-    return (f'<div class="sm-field"><div class="k"><span class="idx">{idx}</span> '
+    cls = f" {cls}" if cls else ""
+    return (f'<div class="sm-field{cls}"><div class="k"><span class="idx">{idx}</span> '
             f'{key}</div><div class="v">{value}{unit}</div></div>')
 
 
+def lede(text: str, top: str = "1rem") -> None:
+    st.markdown(
+        f'<p class="sm-lede" style="margin-top:{top}">{text}</p>',
+        unsafe_allow_html=True)
+
+
 # --------------------------------------------------------------------------- #
-# Hero
+# Hero (shared, above the tabs)
 # --------------------------------------------------------------------------- #
 st.markdown(
     f"""
     <div class="sm-eyebrow">§ 0.0 — ML INFRASTRUCTURE · SNEAKER-INTEL PHASE 2</div>
     <div class="sm-wordmark">SAM<span class="sm-mid">·</span>MALIK</div>
-    <div class="sm-display">Price premiums,<br>predicted forward in time.</div>
+    <div class="sm-display">Price premiums, predicted<br>to the edge of the data.</div>
     <div class="sm-status"><span class="dot"></span>pipeline sneaker.0.8 // green
-      &nbsp;·&nbsp; {RUN['rows_scored']} real StockX sales</div>
+      &nbsp;·&nbsp; {RUN['rows_scored']} real StockX sales · two live sources</div>
     <p class="sm-lede">I build the plumbing that moves data quietly and correctly.
-    This is the ML layer I deferred in <a href="{SNEAKER_INTEL_URL}">sneaker-intel</a> and
-    came back to build: ingest, feature engineering, a loud data contract, distributed
-    training, a model registry, batch and online serving, and drift monitoring. The
-    model is simple on purpose. The pipeline is the point.</p>
+    This is the ML layer I deferred in <a href="{SNEAKER_INTEL_URL}">sneaker-intel</a>
+    and came back to build: ingest, feature engineering, a loud data contract,
+    distributed training, a model registry, batch and online serving, and drift
+    monitoring. The model is simple on purpose. What follows is one predictor read
+    three ways: the model on its own turf, the same model hitting the edge of what
+    it learned, and the machinery that makes both legible.</p>
     """,
     unsafe_allow_html=True,
 )
 
-# --------------------------------------------------------------------------- #
-# Predictor
-# --------------------------------------------------------------------------- #
-rule("§ 0.1 — PREDICT")
-st.markdown(
-    '<p class="sm-lede" style="margin-top:.2rem">Enter a sale\'s engineered '
-    "features; the model returns the predicted resale premium over retail. The "
-    "same imputation and standardization fit during training are applied here from "
-    "the stats saved inside the model, so this matches what the model learned.</p>",
-    unsafe_allow_html=True,
+tab_model, tab_live, tab_arch = st.tabs(
+    ["The Model", "Live Market", "How It Works"]
 )
 
-# seed defaults from a preset
-for k, v in PRESETS["Off-White · limited"].items():
-    st.session_state.setdefault(k, v)
+# =========================================================================== #
+# TAB 1 — THE MODEL (the in-distribution story)
+# =========================================================================== #
+with tab_model:
+    lede(
+        "The original story, and the honest one. A feedforward model trained on "
+        f"{RUN['rows_scored']} StockX sales from 2017 to 2019, {RUN['brands']}, "
+        "predicting resale premium over retail. It knows this era. Everything on "
+        "this tab is in distribution: the predictor defaults to an input the model "
+        "actually saw, so the first number you get back is a sane one.",
+        top=".2rem",
+    )
 
-pcols = st.columns(len(PRESETS))
-for col, (name, vals) in zip(pcols, PRESETS.items()):
-    if col.button(name, use_container_width=True):
-        for k, v in vals.items():
-            st.session_state[k] = v
-        st.rerun()
+    # ----------------------------------------------------------------------- #
+    # Predictor
+    # ----------------------------------------------------------------------- #
+    rule("§ 1.1 — PREDICT")
+    lede(
+        "Enter a sale's engineered features; the model returns the predicted resale "
+        "premium over retail. The same imputation and standardization fit during "
+        "training are applied here from the stats saved inside the model, so this "
+        "matches what the model learned.",
+        top=".2rem",
+    )
 
-c1, c2, c3, c4 = st.columns(4)
-retail = c1.number_input("retail price · $", min_value=40.0, max_value=1000.0,
-                         step=10.0, key="retail_price")
-days = c2.number_input("days since release", min_value=-90, max_value=3000,
-                       step=10, key="days_since_release")
-_rt_names = list(RELEASE_TYPES)
-rt_name = c3.selectbox("release type", _rt_names,
-                       index=[RELEASE_TYPES[n] for n in _rt_names].index(
-                           int(st.session_state["release_type_encoded"])))
-size = c4.selectbox("us size", [7.0, 8.0, 8.5, 9.0, 9.5, 10.0, 10.5, 11.0, 12.0],
-                    key="size_us")
+    # seed defaults from an in-distribution preset
+    for _k, _v in PRESETS["Off-White · limited"].items():
+        st.session_state.setdefault(_k, _v)
 
-with st.expander("§ advanced — engineered signals (default to training means)"):
-    a1, a2, a3 = st.columns(3)
-    brand_avg = a1.number_input("brand avg premium", min_value=-1.0, max_value=20.0,
-                                step=0.05, key="brand_avg_premium")
-    size_prem = a2.number_input("size premium", min_value=-2.0, max_value=2.0,
-                                step=0.01, key="size_premium")
-    rolling = a3.number_input("rolling 7d premium", min_value=-1.0, max_value=20.0,
-                              step=0.05, key="rolling_7d_avg_premium")
+    pcols = st.columns(len(PRESETS))
+    for col, (name, vals) in zip(pcols, PRESETS.items()):
+        if col.button(name, use_container_width=True):
+            for _k, _v in vals.items():
+                st.session_state[_k] = _v
+            st.rerun()
 
-if st.button("PREDICT →", type="primary"):
-    record = {
-        "days_since_release": days,
-        "size_us": size,
-        "retail_price": retail,
-        "size_premium": size_prem,
-        "release_type_encoded": RELEASE_TYPES[rt_name],
-        "rolling_7d_avg_premium": rolling,
-        "search_index_7d_pre_drop": None,  # imputed with the training mean
-        "brand_avg_premium": brand_avg,
-    }
-    premium = float(predict(_bundle(), [record])[0])
-    resale = retail * (1 + premium)
+    c1, c2, c3, c4 = st.columns(4)
+    retail = c1.number_input("retail price · $", min_value=40.0, max_value=1000.0,
+                             step=10.0, key="retail_price")
+    days = c2.number_input("days since release", min_value=-90, max_value=3000,
+                           step=10, key="days_since_release")
+    _rt_names = list(RELEASE_TYPES)
+    rt_name = c3.selectbox("release type", _rt_names,
+                           index=[RELEASE_TYPES[n] for n in _rt_names].index(
+                               int(st.session_state["release_type_encoded"])))
+    size = c4.selectbox("us size", [7.0, 8.0, 8.5, 9.0, 9.5, 10.0, 10.5, 11.0, 12.0],
+                        key="size_us")
+
+    with st.expander("§ advanced — engineered signals (default to training means)"):
+        a1, a2, a3 = st.columns(3)
+        brand_avg = a1.number_input("brand avg premium", min_value=-1.0, max_value=20.0,
+                                    step=0.05, key="brand_avg_premium")
+        size_prem = a2.number_input("size premium", min_value=-2.0, max_value=2.0,
+                                    step=0.01, key="size_premium")
+        rolling = a3.number_input("rolling 7d premium", min_value=-1.0, max_value=20.0,
+                                  step=0.05, key="rolling_7d_avg_premium")
+
+    if st.button("PREDICT →", type="primary"):
+        record = {
+            "days_since_release": days,
+            "size_us": size,
+            "retail_price": retail,
+            "size_premium": size_prem,
+            "release_type_encoded": RELEASE_TYPES[rt_name],
+            "rolling_7d_avg_premium": rolling,
+            "search_index_7d_pre_drop": None,  # imputed with the training mean
+            "brand_avg_premium": brand_avg,
+        }
+        premium = float(predict(_bundle(), [record])[0])
+        resale = retail * (1 + premium)
+        st.markdown(
+            f'<div class="sm-readout"><div class="k">Predicted resale premium</div>'
+            f'<div class="v">{premium * 100:+.0f}%</div>'
+            f'<div class="sub">≈ ${resale:,.0f} resale on a ${retail:,.0f} retail '
+            f'· {premium + 1:.2f}× · model @staging v{RUN["model_version"]}</div></div>',
+            unsafe_allow_html=True,
+        )
+
+    # ----------------------------------------------------------------------- #
+    # Model card
+    # ----------------------------------------------------------------------- #
+    rule("§ 1.2 — MODEL")
     st.markdown(
-        f'<div class="sm-readout"><div class="k">Predicted resale premium</div>'
-        f'<div class="v">{premium * 100:+.0f}%</div>'
-        f'<div class="sub">≈ ${resale:,.0f} resale on a ${retail:,.0f} retail '
-        f'· {premium + 1:.2f}× · model @staging v{RUN["model_version"]}</div></div>',
+        '<div class="sm-grid" style="grid-template-columns:repeat(3,1fr)">'
+        + field(":01", "registry", f"{RUN['model_name']} @staging v{RUN['model_version']}")
+        + field(":02", "val rmse", f"{RUN['val_rmse']:.3f}", "0–20 scale")
+        + field(":03", "temporal split", f"{RUN['n_train']} / {RUN['n_val']}",
+                f"@ {RUN['split_year']}")
+        + field(":04", "architecture", "8 → 64 → 64 → 1", "feedforward")
+        + field(":05", "features", str(RUN["n_features"]), "engineered")
+        + field(":06", "brands", RUN["brands"])
+        + "</div>",
         unsafe_allow_html=True,
     )
 
-# --------------------------------------------------------------------------- #
-# Model card
-# --------------------------------------------------------------------------- #
-rule("§ 0.2 — MODEL")
-st.markdown(
-    '<div class="sm-grid" style="grid-template-columns:repeat(3,1fr)">'
-    + field(":01", "registry", f"{RUN['model_name']} @staging v{RUN['model_version']}")
-    + field(":02", "val rmse", f"{RUN['val_rmse']:.3f}", "0–20 scale")
-    + field(":03", "temporal split", f"{RUN['n_train']} / {RUN['n_val']}",
-            f"@ {RUN['split_year']}")
-    + field(":04", "architecture", "8 → 64 → 64 → 1", "feedforward")
-    + field(":05", "features", str(RUN["n_features"]), "engineered")
-    + field(":06", "brands", RUN["brands"])
-    + "</div>",
-    unsafe_allow_html=True,
-)
-
-# --------------------------------------------------------------------------- #
-# Pipeline topology
-# --------------------------------------------------------------------------- #
-rule("§ 0.3 — THE PIPELINE")
-stages = [
-    (":01", "ingest", "postgres · kicksdb"),
-    (":02", "features", "pyspark"),
-    (":03", "validate", "pandera"),
-    (":04", "train", "ray + pytorch"),
-    (":05", "register", "mlflow"),
-    (":06", "score", "batch + api"),
-]
-flow = '<div class="sm-flow">' + "".join(
-    f'<div class="sm-stage"><div class="i">{i}</div><div class="n">{n}</div>'
-    f'<div class="t">{t}</div></div>' for i, n, t in stages) + "</div>"
-st.markdown(flow, unsafe_allow_html=True)
-st.markdown(
-    '<p class="sm-lede" style="margin-top:1rem">Every stage runs on its own from '
-    "the CLI and speaks to the next only through Parquet at an S3 (or local) path. "
-    "Airflow orchestrates the topology; a scheduled monitor watches for drift and "
-    "retrains only when the data has moved. Config is the single source of truth, "
-    "the data contract is explicit and loud, and every non-obvious decision is "
-    "written down.</p>",
-    unsafe_allow_html=True,
-)
-
-# --------------------------------------------------------------------------- #
-# Observed
-# --------------------------------------------------------------------------- #
-rule("§ 0.4 — OBSERVED")
-st.markdown(
-    '<div class="sm-grid" style="grid-template-columns:repeat(4,1fr)">'
-    + field(":01", "rows scored", RUN["rows_scored"], "real sales")
-    + field(":02", "scoring rmse", f"{RUN['scoring_rmse']:.3f}", "full set")
-    + field(":03", "row retention", RUN["retention"], "validated")
-    + field(":04", "feature drift", RUN["drift_features"], "PSI > 0.2")
-    + "</div>",
-    unsafe_allow_html=True,
-)
-st.markdown(
-    f'<p class="sm-lede" style="margin-top:1rem">From a real run over '
-    f"{RUN['rows_scored']} StockX sales ({RUN['brands']}, 2017–2019). The validator "
-    f"caught {RUN['pre_release']} pre-release sales and premium outliers past the "
-    "ceiling; each became a documented config decision rather than a silent patch. "
-    "That is the validator doing its job on real data.</p>",
-    unsafe_allow_html=True,
-)
-
-# --------------------------------------------------------------------------- #
-# Current market (KicksDB)
-# --------------------------------------------------------------------------- #
-rule("§ 0.5 — CURRENT MARKET · KICKSDB")
-st.markdown(
-    '<p class="sm-lede" style="margin-top:.2rem">The model learned on 2017–2019 '
-    "Off-White and Yeezy StockX sales. These are current sneakers pulled from "
-    '<a href="https://kicks.dev">KicksDB</a> and scored through the exact same '
-    "inference path. They are out of distribution: the drift check above puts a "
-    "number on that gap, and the premiums here run hot because the model never saw "
-    "a 2024 market. Retail comes from a curated reference (the Starter tier returns "
-    "none), and the signals a snapshot can't give (rolling average, pre-drop search) "
-    "are imputed. Shown as-is, not quietly corrected.</p>",
-    unsafe_allow_html=True,
-)
-_kick_cards = ""
-for _item in CURRENT_KICKSDB:
-    _prem = float(predict(_bundle(), [_kicksdb_record(_item)])[0])
-    _kick_cards += (
-        f'<div class="sm-field"><div class="k">{_item["name"]} '
-        f'<span class="idx">· {_item["note"]}</span></div>'
-        f'<div class="v">{_prem * 100:+.0f}%<span class="u"> premium</span></div>'
-        f'<div class="k" style="margin-top:6px">${_item["retail"]:.0f} retail '
-        f'· ~${_item["retail"] * (1 + _prem):,.0f} resale</div></div>'
+    # ----------------------------------------------------------------------- #
+    # Evaluation on the real run
+    # ----------------------------------------------------------------------- #
+    rule("§ 1.3 — EVALUATION")
+    st.markdown(
+        '<div class="sm-grid" style="grid-template-columns:repeat(4,1fr)">'
+        + field(":01", "rows scored", RUN["rows_scored"], "real sales")
+        + field(":02", "scoring rmse", f"{RUN['scoring_rmse']:.3f}", "full set")
+        + field(":03", "row retention", RUN["retention"], "validated")
+        + field(":04", "in-era drift", RUN["drift_features"], "PSI > 0.2")
+        + "</div>",
+        unsafe_allow_html=True,
     )
-st.markdown(
-    '<div class="sm-grid" style="grid-template-columns:repeat(4,1fr)">'
-    + _kick_cards + "</div>",
-    unsafe_allow_html=True,
-)
+    lede(
+        f"From a real run over {RUN['rows_scored']} StockX sales "
+        f"({RUN['brands']}, 2017–2019). The split holds out the last slice of time "
+        f"({RUN['n_train']} / {RUN['n_val']} at {RUN['split_year']}) rather than a "
+        f"random sample, so the validation number is a forward-in-time test, not a "
+        f"leak. The validator caught {RUN['pre_release']} pre-release sales and "
+        "premium outliers past the ceiling; each became a documented config decision "
+        "rather than a silent patch. That is the validator doing its job on real data."
+    )
+    lede(
+        "What the model knows: one era, well. Within that era nothing drifts, which "
+        "is what the 0 / 8 above says. Point it at today's market and it runs hot. "
+        "That is the next tab, and it is on purpose, not a bug.",
+        top="1rem",
+    )
+
+# =========================================================================== #
+# TAB 2 — LIVE MARKET (the KicksDB / out-of-distribution story)
+# =========================================================================== #
+with tab_live:
+    lede(
+        "Same model, same inference path, current sneakers. These are pulled from "
+        '<a href="https://kicks.dev">KicksDB</a> and scored through the exact '
+        "transform saved inside the model, so nothing about the preprocessing "
+        "changed between a 2019 training row and a 2026 one. The point of this tab is "
+        "the distance between what the model learned and what it is now being asked.",
+        top=".2rem",
+    )
+
+    # ----------------------------------------------------------------------- #
+    # Then vs now: the interpretive spine
+    # ----------------------------------------------------------------------- #
+    rule("§ 2.1 — THEN vs NOW")
+    st.markdown(
+        '<div class="sm-compare">'
+        '<div class="sm-side"><div class="h">The model\'s world · 2017–2019</div>'
+        '<div class="b">The hyped StockX era</div>'
+        '<div class="d">Off-White and Yeezy, limited drops trading at multiples of '
+        f'retail. {RUN["rows_scored"]} sales. This is the shape of premium the model '
+        'learned to predict.</div></div>'
+        '<div class="sm-vs">VS</div>'
+        '<div class="sm-side now"><div class="h">Today\'s market · 2026 snapshot</div>'
+        '<div class="b">Current releases from KicksDB</div>'
+        '<div class="d">Mostly years past their drop, many trading near or below '
+        'retail. The model has never seen a single one of them.</div></div>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+
+    # ----------------------------------------------------------------------- #
+    # The OOD framing: the load-bearing copy
+    # ----------------------------------------------------------------------- #
+    rule("§ 2.2 — OFF THE END OF THE DATA")
+    lede(
+        "The predictions below run hot. A current Dunk comes back around +460% over "
+        "retail when it actually trades near retail today. This is not the model "
+        "breaking. It is the model doing exactly what a model does off the end of its "
+        "training data: it learned that hyped 2017–2019 pairs carried large premiums, "
+        "it has never seen a 2026 general-release Dunk, so it extrapolates the only "
+        "thing it knows.",
+        top=".2rem",
+    )
+    lede(
+        "The drift monitor measures that same distance and agrees. The two features "
+        "that moved most, <b>days_since_release</b> and <b>retail_price</b>, blow "
+        "past the PSI threshold, which is why the retrain gate trips. The hot "
+        "prediction and the drift number are one fact told twice: the market the "
+        "model learned is not the market it is now being shown.",
+        top="1rem",
+    )
+    lede(
+        "That is the point, not the caveat. A drift monitor that never fired would be "
+        "the useless one. This one fires exactly when the data moves out from under "
+        "the model, which is the signal to retrain rather than trust a stale number.",
+        top="1rem",
+    )
+
+    # current sneaker cards, scored hot
+    _kick_cards = ""
+    for _item in CURRENT_KICKSDB:
+        _prem = float(predict(_bundle(), [_kicksdb_record(_item)])[0])
+        _kick_cards += (
+            f'<div class="sm-field hot"><div class="k">{_item["name"]} '
+            f'<span class="idx">· {_item["note"]}</span></div>'
+            f'<div class="v">{_prem * 100:+.0f}%<span class="u"> premium</span></div>'
+            f'<div class="k" style="margin-top:6px">${_item["retail"]:.0f} retail '
+            f'· ~${_item["retail"] * (1 + _prem):,.0f} implied resale</div></div>'
+        )
+    # the uncomputable one: no retail in the reference, so no premium, reported not scored
+    _kick_cards += (
+        f'<div class="sm-field dim"><div class="k">{UNCOMPUTABLE_KICKSDB["name"]} '
+        f'<span class="idx">· {UNCOMPUTABLE_KICKSDB["note"]}</span></div>'
+        '<div class="v">—<span class="u"> uncomputable</span></div>'
+        '<div class="k" style="margin-top:6px">no retail · not scored</div></div>'
+    )
+    st.markdown(
+        '<div class="sm-grid" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr))">'
+        + _kick_cards + "</div>",
+        unsafe_allow_html=True,
+    )
+    lede(
+        "Retail is the boundary on what can be scored at all. The Starter API returns "
+        "no retail, so it is carried from a curated 13-SKU reference. A current "
+        "release outside that reference, like the KAWS pair above, has no retail to "
+        "compute a premium against, so it is reported uncomputable and left unscored "
+        "rather than handed a fabricated number.",
+        top="1rem",
+    )
+
+    # ----------------------------------------------------------------------- #
+    # The monitor: PSI drift (expanded visually in a later pass)
+    # ----------------------------------------------------------------------- #
+    rule("§ 2.3 — THE MONITOR")
+    lede(
+        "The same snapshot, run through the drift stage against the model's training "
+        "distribution. Two of the four computable features drift far past the 0.2 "
+        "threshold and the retrain gate trips. The other four can't be computed from "
+        "a current-only snapshot, so they are excluded with a reason rather than "
+        "measured on degenerate data.",
+        top=".2rem",
+    )
+
+    # PSI bars for the four snapshot-computable features
+    _vis_max = 2.5
+    _thresh_pct = PSI_THRESHOLD / _vis_max * 100
+    _rows = ""
+    for _feat, _psi, _drifted in DRIFT_COMPUTED:
+        if _psi is None:  # computable, under threshold; exact value not recorded
+            _rows += (
+                f'<div class="sm-psi-row"><div class="f">{_feat}</div>'
+                f'<div class="sm-psi-track"><div class="sm-psi-thresh" '
+                f'style="left:{_thresh_pct:.1f}%"></div></div>'
+                '<div class="sm-psi-val" style="color:var(--ash)">under 0.2</div></div>'
+            )
+            continue
+        _pct = min(_psi / _vis_max, 1.0) * 100
+        _color = "var(--oxblood-lift)" if _drifted else "var(--phosphor-dim)"
+        _label = f"~{_psi:.1f}" + (" →" if _psi > _vis_max else "")
+        _rows += (
+            f'<div class="sm-psi-row"><div class="f">{_feat}</div>'
+            f'<div class="sm-psi-track">'
+            f'<div class="sm-psi-fill" style="width:{_pct:.1f}%;background:{_color}"></div>'
+            f'<div class="sm-psi-thresh" style="left:{_thresh_pct:.1f}%"></div></div>'
+            f'<div class="sm-psi-val" style="color:{_color}">{_label}</div></div>'
+        )
+    st.markdown(f'<div class="sm-psi">{_rows}</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<p class="sm-label" style="margin:.6rem 0 0">the vertical rule is the 0.2 '
+        "retrain threshold · days_since_release and retail_price clear it by a wide "
+        "margin, which is a 2026 snapshot of shoes years past their drop</p>",
+        unsafe_allow_html=True,
+    )
+
+    # The four a snapshot can't honestly compute, excluded with the reason
+    _excl = "".join(
+        f'<div class="sm-psi-note"><b>{_f}</b> — excluded · {_r}</div>'
+        for _f, _r in DRIFT_EXCLUDED
+    )
+    st.markdown(
+        '<div class="sm-psi" style="margin-top:1.3rem">'
+        '<div class="sm-psi-note" style="color:var(--bone-dim)">Four features a '
+        "current-only snapshot can't support, excluded rather than measured on "
+        "degenerate data:</div>" + _excl + "</div>",
+        unsafe_allow_html=True,
+    )
+
+    # The retrain gate
+    st.markdown(
+        '<div class="sm-grid" style="grid-template-columns:repeat(3,1fr);margin-top:1.3rem">'
+        + field(":01", "features drifted", "2 / 4", "computable")
+        + field(":02", "retrain gate", "TRIPPED", "PSI > 0.2", cls="hot")
+        + field(":03", "would trigger", "retrain", "in the live pipeline")
+        + "</div>",
+        unsafe_allow_html=True,
+    )
+    lede(
+        "In the deployed pipeline this is a scheduled Airflow DAG. When the gate "
+        "trips it fires the training pipeline; when nothing drifts, it short-circuits "
+        "and nothing retrains. The retrain is evidence-driven, not a blind cron.",
+        top="1rem",
+    )
+
+# =========================================================================== #
+# TAB 3 — HOW IT WORKS (architecture and seams; reworked in a later pass)
+# =========================================================================== #
+with tab_arch:
+    lede(
+        "The machinery under both tabs. The model is deliberately simple; the "
+        "pipeline around it is the part that took the work.",
+        top=".2rem",
+    )
+
+    rule("§ 3.1 — THE PIPELINE")
+    stages = [
+        (":01", "ingest", "postgres · kicksdb"),
+        (":02", "features", "pyspark"),
+        (":03", "validate", "pandera"),
+        (":04", "train", "ray + pytorch"),
+        (":05", "register", "mlflow"),
+        (":06", "score", "batch + api"),
+    ]
+    flow = '<div class="sm-flow">' + "".join(
+        f'<div class="sm-stage"><div class="i">{i}</div><div class="n">{n}</div>'
+        f'<div class="t">{t}</div></div>' for i, n, t in stages) + "</div>"
+    st.markdown(flow, unsafe_allow_html=True)
+    lede(
+        "Every stage runs on its own from the CLI and speaks to the next only through "
+        "Parquet at an S3 (or local) path. Two Airflow DAGs sit on top: a training "
+        "pipeline, and a drift-monitor that watches for movement and retrains only "
+        "when the data has moved. Config is the single source of truth, the data "
+        "contract is explicit and loud, and every non-obvious decision is written down."
+    )
+
+    rule("§ 3.2 — TWO SOURCES, ONE SCHEMA")
+    st.markdown(
+        '<div class="sm-grid" style="grid-template-columns:repeat(4,1fr)">'
+        + field(":01", "real sources", "2", "postgres · kicksdb")
+        + field(":02", "downstream changed", "0", "files, adding kicksdb")
+        + field(":03", "inference paths", "1", "batch + live")
+        + field(":04", "retail reference", "13", "curated SKUs")
+        + "</div>",
+        unsafe_allow_html=True,
+    )
+    lede(
+        "Ingest is an anti-corruption layer. It lands two real sources, the "
+        "sneaker-intel Postgres warehouse and the KicksDB market API, into one "
+        "canonical schema, byte-compatible, so nothing downstream knows there is a "
+        "second source. Features, validate, train, and serve were unchanged when "
+        "KicksDB was added, a zero-line diff. That is the claim the whole "
+        "architecture was built to make, and it held.",
+        top="1rem",
+    )
+
+    rule("§ 3.3 — ONE INFERENCE PATH")
+    lede(
+        "Batch scoring and live KicksDB scoring both go through the same transform, "
+        "with the exact imputation and standardization saved inside model.pt. There "
+        "is no second copy of the preprocessing to drift, so a batch row and a live "
+        "row get identical treatment. The +460% Dunk on the last tab went through the "
+        "same path a 2019 training row did.",
+        top=".2rem",
+    )
+    lede(
+        "Retail is the honest ceiling. The Starter API exposes no retail, so it is "
+        "carried from a 13-SKU reference and never fabricated. That reference is the "
+        "limit on what can have a premium computed at all, which is why some current "
+        "sneakers are reported instead of scored.",
+        top="1rem",
+    )
 
 # --------------------------------------------------------------------------- #
-# Footer
+# Footer (shared, below the tabs)
 # --------------------------------------------------------------------------- #
 st.markdown('<div class="sm-rule"><span class="line"></span></div>',
             unsafe_allow_html=True)
